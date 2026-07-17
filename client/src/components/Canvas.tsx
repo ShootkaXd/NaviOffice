@@ -1,11 +1,18 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store';
+import { useAuth } from '../auth';
 import { Desk, MapElement, Room } from '../types';
-import { uid, snap, DESK_RADIUS, STATUS_COLORS, ROOM_COLORS } from '../utils';
+import { uid, snap, lastName, initials, DESK_RADIUS, DESK_FREE_COLOR, DESK_OCCUPIED_COLOR, ROOM_COLORS } from '../utils';
+import { usePhoto } from './Avatar';
+import EmployeeCard from './EmployeeCard';
+import AssignDialog from './AssignDialog';
+import Legend from './Legend';
 
 const CANVAS_W = 2000;
 const CANVAS_H = 1400;
 const HANDLE_SIZE = 7;
+const CARD_W = 256;
+const CARD_H = 280;
 
 interface DragState {
   type: 'move' | 'resize';
@@ -22,6 +29,12 @@ interface DrawState {
   currentY: number;
 }
 
+interface CardState {
+  deskId: string;
+  x: number;
+  y: number;
+}
+
 function svgPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
   const pt = svg.createSVGPoint();
   pt.x = clientX;
@@ -33,31 +46,200 @@ function svgPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
   return { x: transformed.x, y: transformed.y };
 }
 
+function DeskNode({
+  desk,
+  isSelected,
+  isFocused,
+  onMouseDown,
+  onClick,
+}: {
+  desk: Desk;
+  isSelected: boolean;
+  isFocused: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const occupied = !!desk.assignment;
+  const photo = usePhoto(desk.assignment?.login ?? null);
+  const color = occupied ? DESK_OCCUPIED_COLOR : DESK_FREE_COLOR;
+  const clipId = `desk-clip-${desk.id}`;
+
+  return (
+    <g onMouseDown={onMouseDown} onClick={onClick} style={{ cursor: 'pointer' }}>
+      {isFocused && (
+        <circle
+          className="desk-pulse"
+          cx={desk.x}
+          cy={desk.y}
+          r={DESK_RADIUS}
+          fill="none"
+          stroke="#6366f1"
+          strokeWidth={3}
+        />
+      )}
+      <circle
+        cx={desk.x}
+        cy={desk.y}
+        r={DESK_RADIUS}
+        fill={color}
+        fillOpacity={occupied ? 0.12 : 0.08}
+        stroke={color}
+        strokeWidth={isSelected ? 2.5 : 1.5}
+      />
+      {isSelected && (
+        <circle
+          cx={desk.x}
+          cy={desk.y}
+          r={DESK_RADIUS + 4}
+          fill="none"
+          stroke="#6366f1"
+          strokeWidth={1.5}
+          strokeDasharray="4 2"
+        />
+      )}
+      {occupied ? (
+        <>
+          <clipPath id={clipId}>
+            <circle cx={desk.x} cy={desk.y - 2} r={11} />
+          </clipPath>
+          <circle cx={desk.x} cy={desk.y - 2} r={11} fill={DESK_OCCUPIED_COLOR} pointerEvents="none" />
+          {photo ? (
+            <image
+              href={photo}
+              x={desk.x - 11}
+              y={desk.y - 13}
+              width={22}
+              height={22}
+              clipPath={`url(#${clipId})`}
+              preserveAspectRatio="xMidYMid slice"
+              pointerEvents="none"
+            />
+          ) : (
+            <text
+              x={desk.x}
+              y={desk.y + 1}
+              textAnchor="middle"
+              fontSize={8}
+              fill="white"
+              fontWeight="600"
+              pointerEvents="none"
+              style={{ userSelect: 'none' }}
+            >
+              {initials(desk.assignment!.displayName)}
+            </text>
+          )}
+          <text
+            x={desk.x}
+            y={desk.y + 15}
+            textAnchor="middle"
+            fontSize={7.5}
+            fill="#4f46e5"
+            fontWeight="600"
+            pointerEvents="none"
+            style={{ userSelect: 'none' }}
+          >
+            {lastName(desk.assignment!.displayName)}
+          </text>
+          <text
+            x={desk.x}
+            y={desk.y + 24}
+            textAnchor="middle"
+            fontSize={6.5}
+            fill="#9ca3af"
+            pointerEvents="none"
+            style={{ userSelect: 'none' }}
+          >
+            {desk.name}
+          </text>
+        </>
+      ) : (
+        <>
+          <rect
+            x={desk.x - 9}
+            y={desk.y - 4}
+            width={18}
+            height={10}
+            rx={2}
+            fill={color}
+            fillOpacity={0.5}
+            transform={desk.rotation ? `rotate(${desk.rotation} ${desk.x} ${desk.y})` : undefined}
+            pointerEvents="none"
+          />
+          <text
+            x={desk.x}
+            y={desk.y + 15}
+            textAnchor="middle"
+            fontSize={8}
+            fill={color}
+            fontWeight="600"
+            pointerEvents="none"
+            style={{ userSelect: 'none' }}
+          >
+            {desk.name}
+          </text>
+        </>
+      )}
+    </g>
+  );
+}
+
 export default function Canvas() {
   const { state, dispatch } = useStore();
+  const { user } = useAuth();
+  const canEdit = user?.role === 'Admin';
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const movedRef = useRef(false);
   const [drag, setDrag] = useState<DragState | null>(null);
   const [draw, setDraw] = useState<DrawState | null>(null);
   const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 1200, h: 800 });
   const [pan, setPan] = useState<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
+  const [card, setCard] = useState<CardState | null>(null);
+  const [assignFor, setAssignFor] = useState<string | null>(null);
 
   const currentElements = state.elements.filter((el) => el.floorId === state.currentFloorId);
-  const selected = state.elements.find((el) => el.id === state.selectedId);
+  const cardDesk = card
+    ? (state.elements.find((el) => el.id === card.deskId && el.type === 'desk') as Desk | undefined)
+    : undefined;
+  const assignDeskEl = assignFor
+    ? (state.elements.find((el) => el.id === assignFor && el.type === 'desk') as Desk | undefined)
+    : undefined;
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedId) {
+      if (canEdit && (e.key === 'Delete' || e.key === 'Backspace') && state.selectedId) {
         const tag = (e.target as HTMLElement).tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         dispatch({ type: 'DELETE_ELEMENT', payload: state.selectedId });
+        setCard(null);
       }
       if (e.key === 'Escape') {
         dispatch({ type: 'SELECT', payload: null });
+        setCard(null);
       }
     }
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [state.selectedId, dispatch]);
+  }, [state.selectedId, dispatch, canEdit]);
+
+  // Смена этажа — закрыть карточку и диалог.
+  useEffect(() => {
+    setCard(null);
+    setAssignFor(null);
+  }, [state.currentFloorId]);
+
+  // Фокус на столе из поиска: подлететь и подсветить ~2 секунды.
+  useEffect(() => {
+    if (!state.focusDeskId) return;
+    const desk = state.elements.find(
+      (el) => el.id === state.focusDeskId && el.type === 'desk'
+    ) as Desk | undefined;
+    if (!desk || desk.floorId !== state.currentFloorId) return;
+    setViewBox({ x: desk.x - 300, y: desk.y - 200, w: 600, h: 400 });
+    const t = setTimeout(() => dispatch({ type: 'FOCUS_DESK', payload: null }), 2200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.focusDeskId, state.currentFloorId]);
 
   const getSVGPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -74,24 +256,27 @@ export default function Canvas() {
 
     if (e.button === 0 && (e.altKey || e.metaKey)) {
       setPan({ sx: e.clientX, sy: e.clientY, ox: viewBox.x, oy: viewBox.y });
+      setCard(null);
       return;
     }
 
-    if (state.tool === 'room') {
+    if (canEdit && state.tool === 'room') {
       const sx = snap(pt.x);
       const sy = snap(pt.y);
       setDraw({ startX: sx, startY: sy, currentX: sx, currentY: sy });
       return;
     }
 
-    if (state.tool === 'desk') {
+    if (canEdit && state.tool === 'desk') {
+      if (!state.currentFloorId) return;
       const desk: Desk = {
-        id: uid(),
+        id: 'tmp-' + uid(),
         type: 'desk',
         x: snap(pt.x),
         y: snap(pt.y),
         name: `D${currentElements.filter((el) => el.type === 'desk').length + 1}`,
-        status: 'available',
+        rotation: 0,
+        assignment: null,
         floorId: state.currentFloorId,
       };
       dispatch({ type: 'ADD_ELEMENT', payload: desk });
@@ -101,6 +286,7 @@ export default function Canvas() {
     // select mode — clicking canvas background deselects
     if ((e.target as SVGElement).id === 'canvas-bg') {
       dispatch({ type: 'SELECT', payload: null });
+      setCard(null);
     }
   }
 
@@ -122,6 +308,7 @@ export default function Canvas() {
       const pt = getSVGPoint(e.clientX, e.clientY);
       const dx = pt.x - drag.startX;
       const dy = pt.y - drag.startY;
+      if (Math.abs(dx) > 2 || Math.abs(dy) > 2) movedRef.current = true;
 
       if (drag.type === 'move') {
         const orig = drag.origEl;
@@ -162,7 +349,7 @@ export default function Canvas() {
     }
   }
 
-  function onSVGMouseUp(e: React.MouseEvent<SVGSVGElement>) {
+  function onSVGMouseUp() {
     if (pan) {
       setPan(null);
       return;
@@ -171,17 +358,17 @@ export default function Canvas() {
     if (draw) {
       const minW = Math.abs(draw.currentX - draw.startX);
       const minH = Math.abs(draw.currentY - draw.startY);
-      if (minW > 20 && minH > 20) {
+      if (minW > 20 && minH > 20 && state.currentFloorId) {
         const x = Math.min(draw.startX, draw.currentX);
         const y = Math.min(draw.startY, draw.currentY);
         const room: Room = {
-          id: uid(),
+          id: 'tmp-' + uid(),
           type: 'room',
           x,
           y,
           width: Math.abs(draw.currentX - draw.startX),
           height: Math.abs(draw.currentY - draw.startY),
-          name: `Room ${currentElements.filter((el) => el.type === 'room').length + 1}`,
+          name: `Комната ${currentElements.filter((el) => el.type === 'room').length + 1}`,
           color: ROOM_COLORS[Math.floor(Math.random() * ROOM_COLORS.length)],
           capacity: 4,
           floorId: state.currentFloorId,
@@ -199,10 +386,27 @@ export default function Canvas() {
 
   function onElementMouseDown(e: React.MouseEvent, el: MapElement) {
     e.stopPropagation();
-    if (state.tool !== 'select') return;
+    if (el.type === 'room') setCard(null);
+    if (!canEdit || state.tool !== 'select') return;
     dispatch({ type: 'SELECT', payload: el.id });
     const pt = getSVGPoint(e.clientX, e.clientY);
+    movedRef.current = false;
     setDrag({ type: 'move', startX: pt.x, startY: pt.y, origEl: el });
+  }
+
+  function onDeskClick(e: React.MouseEvent, desk: Desk) {
+    e.stopPropagation();
+    if (movedRef.current) {
+      movedRef.current = false;
+      return;
+    }
+    if (canEdit && state.tool !== 'select') return;
+    dispatch({ type: 'SELECT', payload: desk.id });
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.min(Math.max(e.clientX - rect.left + 14, 8), Math.max(8, rect.width - CARD_W - 8));
+    const y = Math.min(Math.max(e.clientY - rect.top - 24, 8), Math.max(8, rect.height - CARD_H - 8));
+    setCard({ deskId: desk.id, x, y });
   }
 
   function onHandleMouseDown(
@@ -217,6 +421,7 @@ export default function Canvas() {
 
   function onWheel(e: React.WheelEvent<SVGSVGElement>) {
     e.preventDefault();
+    setCard(null);
     const factor = e.deltaY > 0 ? 1.1 : 0.9;
     const pt = getSVGPoint(e.clientX, e.clientY);
     setViewBox((v) => {
@@ -231,13 +436,13 @@ export default function Canvas() {
   const vb = `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`;
 
   const cursorStyle =
-    state.tool === 'room' ? 'crosshair' :
-    state.tool === 'desk' ? 'cell' :
+    canEdit && state.tool === 'room' ? 'crosshair' :
+    canEdit && state.tool === 'desk' ? 'cell' :
     drag ? 'grabbing' :
     'default';
 
   return (
-    <div className="flex-1 relative overflow-hidden bg-gray-100">
+    <div ref={containerRef} className="flex-1 relative overflow-hidden bg-gray-100">
       <svg
         ref={svgRef}
         className="w-full h-full select-none"
@@ -298,7 +503,7 @@ export default function Canvas() {
                 strokeWidth={isSelected ? 2 : 1.5}
                 strokeOpacity={isSelected ? 1 : 0.7}
                 rx={4}
-                style={{ cursor: state.tool === 'select' ? 'grab' : 'default' }}
+                style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'default' }}
                 onMouseDown={(e) => onElementMouseDown(e, room)}
               />
               <text
@@ -325,12 +530,12 @@ export default function Canvas() {
                   pointerEvents="none"
                   style={{ userSelect: 'none' }}
                 >
-                  {room.capacity} seats
+                  {room.capacity} мест
                 </text>
               )}
 
               {/* Resize handles */}
-              {isSelected && state.tool === 'select' && (
+              {canEdit && isSelected && state.tool === 'select' && (
                 <>
                   {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
                     const hx =
@@ -368,58 +573,15 @@ export default function Canvas() {
         {/* Desks */}
         {currentElements.filter((el) => el.type === 'desk').map((el) => {
           const desk = el as Desk;
-          const isSelected = state.selectedId === desk.id;
-          const color = STATUS_COLORS[desk.status];
           return (
-            <g
+            <DeskNode
               key={desk.id}
+              desk={desk}
+              isSelected={state.selectedId === desk.id}
+              isFocused={state.focusDeskId === desk.id}
               onMouseDown={(e) => onElementMouseDown(e, desk)}
-              style={{ cursor: state.tool === 'select' ? 'grab' : 'default' }}
-            >
-              <circle
-                cx={desk.x}
-                cy={desk.y}
-                r={DESK_RADIUS}
-                fill={color}
-                fillOpacity={0.25}
-                stroke={color}
-                strokeWidth={isSelected ? 2.5 : 1.5}
-              />
-              {isSelected && (
-                <circle
-                  cx={desk.x}
-                  cy={desk.y}
-                  r={DESK_RADIUS + 4}
-                  fill="none"
-                  stroke="#6366f1"
-                  strokeWidth={1.5}
-                  strokeDasharray="4 2"
-                />
-              )}
-              {/* Desk icon */}
-              <rect
-                x={desk.x - 9}
-                y={desk.y - 4}
-                width={18}
-                height={10}
-                rx={2}
-                fill={color}
-                fillOpacity={0.8}
-                pointerEvents="none"
-              />
-              <text
-                x={desk.x}
-                y={desk.y + 15}
-                textAnchor="middle"
-                fontSize={8}
-                fill={color}
-                fontWeight="600"
-                pointerEvents="none"
-                style={{ userSelect: 'none' }}
-              >
-                {desk.name}
-              </text>
-            </g>
+              onClick={(e) => onDeskClick(e, desk)}
+            />
           );
         })}
 
@@ -441,6 +603,25 @@ export default function Canvas() {
         )}
       </svg>
 
+      {/* Employee card popup */}
+      {cardDesk && card && (
+        <EmployeeCard
+          desk={cardDesk}
+          x={card.x}
+          y={card.y}
+          onClose={() => setCard(null)}
+          onAssign={() => setAssignFor(cardDesk.id)}
+        />
+      )}
+
+      {/* Assign dialog */}
+      {assignDeskEl && (
+        <AssignDialog desk={assignDeskEl} onClose={() => setAssignFor(null)} />
+      )}
+
+      {/* Legend */}
+      <Legend />
+
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1">
         <button
@@ -458,7 +639,7 @@ export default function Canvas() {
         <button
           onClick={() => setViewBox({ x: 0, y: 0, w: 1200, h: 800 })}
           className="w-8 h-8 bg-white shadow rounded text-gray-500 hover:text-gray-900 flex items-center justify-center"
-          title="Reset view"
+          title="Сбросить вид"
         >
           <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
@@ -468,14 +649,14 @@ export default function Canvas() {
 
       {/* Tool hint */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-none">
-        {state.tool === 'room' && (
+        {canEdit && state.tool === 'room' && (
           <div className="bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
-            Click and drag to draw a room
+            Нарисуйте комнату, зажав кнопку мыши
           </div>
         )}
-        {state.tool === 'desk' && (
+        {canEdit && state.tool === 'desk' && (
           <div className="bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
-            Click to place a desk
+            Кликните по карте, чтобы поставить стол
           </div>
         )}
       </div>

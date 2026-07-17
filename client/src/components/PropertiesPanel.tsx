@@ -1,6 +1,6 @@
 import { useStore } from '../store';
-import { Room, Desk, DeskStatus, MapElement } from '../types';
-import { ROOM_COLORS, STATUS_COLORS } from '../utils';
+import { Room, Desk, MapElement } from '../types';
+import { ROOM_COLORS } from '../utils';
 
 export default function PropertiesPanel() {
   const { state, dispatch } = useStore();
@@ -20,16 +20,17 @@ export default function PropertiesPanel() {
   if (!selected) {
     return (
       <aside className="w-56 bg-sidebar border-l border-white/10 flex flex-col p-4 shrink-0">
-        <h2 className="text-white/30 text-xs font-semibold uppercase tracking-widest mb-4">Properties</h2>
-        <p className="text-white/20 text-xs mt-2">Select an element on the canvas to edit its properties.</p>
+        <h2 className="text-white/30 text-xs font-semibold uppercase tracking-widest mb-4">Свойства</h2>
+        <p className="text-white/20 text-xs mt-2">Выберите элемент на карте, чтобы изменить его свойства.</p>
 
         <div className="flex-1" />
 
         <div className="text-white/10 text-[10px] space-y-1">
-          <div>Select tool: click element</div>
-          <div>Room tool: drag to draw</div>
-          <div>Desk tool: click to place</div>
-          <div>Delete: Del key or button</div>
+          <div>Выбор: клик по элементу</div>
+          <div>Комната: нарисовать мышью</div>
+          <div>Стол: клик по карте</div>
+          <div>Удалить: Del или кнопка</div>
+          <div>Сохранить: кнопка сверху</div>
         </div>
       </aside>
     );
@@ -37,17 +38,17 @@ export default function PropertiesPanel() {
 
   return (
     <aside className="w-56 bg-sidebar border-l border-white/10 flex flex-col p-4 shrink-0 overflow-y-auto">
-      <h2 className="text-white/30 text-xs font-semibold uppercase tracking-widest mb-4">Properties</h2>
+      <h2 className="text-white/30 text-xs font-semibold uppercase tracking-widest mb-4">Свойства</h2>
 
       <div className="mb-2">
         <span className="text-white/40 text-[10px] uppercase tracking-widest">
-          {selected.type === 'room' ? 'Room' : 'Desk'}
+          {selected.type === 'room' ? 'Комната' : 'Стол'}
         </span>
       </div>
 
       {/* Name */}
       <label className="block mb-3">
-        <span className="text-white/50 text-xs block mb-1">Name</span>
+        <span className="text-white/50 text-xs block mb-1">Название</span>
         <input
           type="text"
           value={selected.name}
@@ -58,7 +59,7 @@ export default function PropertiesPanel() {
 
       {/* Position */}
       <label className="block mb-1">
-        <span className="text-white/50 text-xs block mb-1">Position</span>
+        <span className="text-white/50 text-xs block mb-1">Позиция</span>
         <div className="flex gap-2">
           <div className="flex-1">
             <span className="text-white/30 text-[10px]">X</span>
@@ -89,7 +90,7 @@ export default function PropertiesPanel() {
           onClick={handleDelete}
           className="w-full py-1.5 text-xs text-red-400 border border-red-400/30 rounded-md hover:bg-red-500/10 transition-colors"
         >
-          Delete element
+          Удалить элемент
         </button>
       </div>
     </aside>
@@ -101,7 +102,7 @@ function RoomProps({ room, update }: { room: Room; update: (p: Partial<Room>) =>
     <>
       <div className="flex gap-2 mb-3 mt-2">
         <label className="flex-1">
-          <span className="text-white/30 text-[10px]">W</span>
+          <span className="text-white/30 text-[10px]">Ширина</span>
           <input
             type="number"
             value={Math.round(room.width)}
@@ -110,7 +111,7 @@ function RoomProps({ room, update }: { room: Room; update: (p: Partial<Room>) =>
           />
         </label>
         <label className="flex-1">
-          <span className="text-white/30 text-[10px]">H</span>
+          <span className="text-white/30 text-[10px]">Высота</span>
           <input
             type="number"
             value={Math.round(room.height)}
@@ -121,7 +122,7 @@ function RoomProps({ room, update }: { room: Room; update: (p: Partial<Room>) =>
       </div>
 
       <label className="block mb-3">
-        <span className="text-white/50 text-xs block mb-1">Capacity</span>
+        <span className="text-white/50 text-xs block mb-1">Вместимость</span>
         <input
           type="number"
           min="1"
@@ -132,7 +133,7 @@ function RoomProps({ room, update }: { room: Room; update: (p: Partial<Room>) =>
       </label>
 
       <label className="block mb-3">
-        <span className="text-white/50 text-xs block mb-2">Color</span>
+        <span className="text-white/50 text-xs block mb-2">Цвет</span>
         <div className="flex flex-wrap gap-1.5">
           {ROOM_COLORS.map((c) => (
             <button
@@ -149,27 +150,33 @@ function RoomProps({ room, update }: { room: Room; update: (p: Partial<Room>) =>
 }
 
 function DeskProps({ desk, update }: { desk: Desk; update: (p: Partial<Desk>) => void }) {
-  const statuses: DeskStatus[] = ['available', 'booked', 'unavailable'];
   return (
-    <label className="block mt-2 mb-3">
-      <span className="text-white/50 text-xs block mb-2">Status</span>
-      <div className="flex flex-col gap-1.5">
-        {statuses.map((s) => (
-          <button
-            key={s}
-            onClick={() => update({ status: s })}
-            className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors ${
-              desk.status === s ? 'bg-white/10 text-white' : 'text-white/40 hover:bg-white/5'
-            }`}
-          >
-            <span
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ background: STATUS_COLORS[s] }}
-            />
-            {s.charAt(0).toUpperCase() + s.slice(1)}
-          </button>
-        ))}
+    <>
+      <label className="block mt-2 mb-3">
+        <span className="text-white/50 text-xs block mb-1">Поворот, °</span>
+        <input
+          type="number"
+          step="15"
+          value={Math.round(desk.rotation)}
+          onChange={(e) => update({ rotation: Number(e.target.value) })}
+          className="w-full bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:border-accent"
+        />
+      </label>
+
+      <div className="mb-3">
+        <span className="text-white/50 text-xs block mb-1">Сотрудник</span>
+        {desk.assignment ? (
+          <div className="bg-sidebar-light border border-white/10 rounded-md px-2 py-1.5">
+            <div className="text-white text-xs">{desk.assignment.displayName}</div>
+            <div className="text-white/40 text-[10px]">{desk.assignment.department}</div>
+          </div>
+        ) : (
+          <div className="text-white/30 text-xs px-1">Место свободно</div>
+        )}
+        <p className="text-white/20 text-[10px] mt-1.5">
+          Назначение — через карточку места на карте.
+        </p>
       </div>
-    </label>
+    </>
   );
 }

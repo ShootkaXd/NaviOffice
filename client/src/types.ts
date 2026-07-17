@@ -1,6 +1,30 @@
-export type ToolType = 'select' | 'room' | 'desk' | 'wall';
+export type ToolType = 'select' | 'room' | 'desk';
 
-export type DeskStatus = 'available' | 'booked' | 'unavailable';
+export type Role = 'Admin' | 'Secretary' | 'User';
+
+export interface User {
+  login: string;
+  displayName: string;
+  department: string;
+  title: string;
+  role: Role;
+}
+
+export interface Employee {
+  login: string;
+  displayName: string;
+  department: string;
+  title: string;
+  email: string;
+  deskId?: string | null;
+}
+
+export interface DeskAssignment {
+  login: string;
+  displayName: string;
+  department: string;
+  title: string;
+}
 
 export interface Room {
   id: string;
@@ -21,7 +45,8 @@ export interface Desk {
   x: number;
   y: number;
   name: string;
-  status: DeskStatus;
+  rotation: number;
+  assignment: DeskAssignment | null;
   floorId: string;
 }
 
@@ -30,6 +55,7 @@ export type MapElement = Room | Desk;
 export interface Floor {
   id: string;
   name: string;
+  order: number;
 }
 
 export interface AppState {
@@ -38,6 +64,7 @@ export interface AppState {
   elements: MapElement[];
   selectedId: string | null;
   tool: ToolType;
+  focusDeskId: string | null;
 }
 
 export type Action =
@@ -46,7 +73,6 @@ export type Action =
   | { type: 'UPDATE_ELEMENT'; payload: MapElement }
   | { type: 'DELETE_ELEMENT'; payload: string }
   | { type: 'SELECT'; payload: string | null }
-  | { type: 'ADD_FLOOR'; payload: Floor }
   | { type: 'SET_FLOOR'; payload: string }
-  | { type: 'RENAME_FLOOR'; payload: { id: string; name: string } }
-  | { type: 'LOAD_STATE'; payload: Partial<AppState> };
+  | { type: 'SET_MAP'; payload: { floors: Floor[]; elements: MapElement[] } }
+  | { type: 'FOCUS_DESK'; payload: string | null };

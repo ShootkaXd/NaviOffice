@@ -1,14 +1,14 @@
 import { createContext, useContext, useReducer, ReactNode } from 'react';
-import { AppState, Action, Floor } from './types';
-
-const defaultFloor: Floor = { id: 'floor-1', name: 'Floor 1' };
+import { AppState, Action } from './types';
+import { getMap } from './api';
 
 const initialState: AppState = {
-  floors: [defaultFloor],
-  currentFloorId: 'floor-1',
+  floors: [],
+  currentFloorId: '',
   elements: [],
   selectedId: null,
   tool: 'select',
+  focusDeskId: null,
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -27,22 +27,35 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         elements: state.elements.filter((el) => el.id !== action.payload),
         selectedId: state.selectedId === action.payload ? null : state.selectedId,
+        focusDeskId: state.focusDeskId === action.payload ? null : state.focusDeskId,
       };
     case 'SELECT':
       return { ...state, selectedId: action.payload };
-    case 'ADD_FLOOR':
-      return { ...state, floors: [...state.floors, action.payload], currentFloorId: action.payload.id };
     case 'SET_FLOOR':
       return { ...state, currentFloorId: action.payload, selectedId: null };
-    case 'RENAME_FLOOR':
-      return {
-        ...state,
-        floors: state.floors.map((f) => (f.id === action.payload.id ? { ...f, name: action.payload.name } : f)),
-      };
-    case 'LOAD_STATE':
-      return { ...state, ...action.payload };
+    case 'SET_MAP': {
+      const { floors, elements } = action.payload;
+      const currentFloorId = floors.some((f) => f.id === state.currentFloorId)
+        ? state.currentFloorId
+        : floors[0]?.id ?? '';
+      const selectedId =
+        state.selectedId && elements.some((el) => el.id === state.selectedId) ? state.selectedId : null;
+      return { ...state, floors, elements, currentFloorId, selectedId };
+    }
+    case 'FOCUS_DESK':
+      return { ...state, focusDeskId: action.payload };
     default:
       return state;
+  }
+}
+
+/** Перечитать карту с сервера и положить в store. */
+export async function refreshMap(dispatch: React.Dispatch<Action>) {
+  try {
+    const map = await getMap();
+    dispatch({ type: 'SET_MAP', payload: map });
+  } catch (err) {
+    console.error('Не удалось загрузить карту', err);
   }
 }
 
