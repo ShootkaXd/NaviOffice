@@ -95,6 +95,7 @@ public class FloorsController : ControllerBase
 
         var existingRooms = await _db.Rooms.Where(r => r.FloorId == id).ToListAsync();
         var existingDesks = await _db.Desks.Where(d => d.FloorId == id).ToListAsync();
+        var existingMeetingRooms = await _db.MeetingRooms.Where(m => m.FloorId == id).ToListAsync();
 
         // --- Rooms ---
         var keptRoomIds = request.Rooms
@@ -162,10 +163,42 @@ public class FloorsController : ControllerBase
             desk.Rotation = dto.Rotation;
         }
 
+        // --- Meeting rooms (брони сохранившихся переговорных не трогаем; удалённые каскадно чистят брони) ---
+        var keptMeetingRoomIds = request.MeetingRooms
+            .Where(m => m.Id.HasValue)
+            .Select(m => m.Id!.Value)
+            .ToHashSet();
+        _db.MeetingRooms.RemoveRange(existingMeetingRooms.Where(m => !keptMeetingRoomIds.Contains(m.Id)));
+
+        var meetingRoomsById = existingMeetingRooms.ToDictionary(m => m.Id);
+        foreach (var dto in request.MeetingRooms)
+        {
+            MeetingRoom meetingRoom;
+            if (dto.Id.HasValue && meetingRoomsById.TryGetValue(dto.Id.Value, out var existing))
+            {
+                meetingRoom = existing;
+            }
+            else
+            {
+                meetingRoom = new MeetingRoom { Id = dto.Id ?? Guid.NewGuid(), FloorId = id };
+                _db.MeetingRooms.Add(meetingRoom);
+            }
+
+            meetingRoom.X = dto.X;
+            meetingRoom.Y = dto.Y;
+            meetingRoom.Width = dto.Width;
+            meetingRoom.Height = dto.Height;
+            meetingRoom.Name = dto.Name;
+            meetingRoom.Email = string.IsNullOrWhiteSpace(dto.Email) ? null : dto.Email.Trim();
+            meetingRoom.Capacity = dto.Capacity;
+            meetingRoom.Color = dto.Color;
+        }
+
         await _db.SaveChangesAsync();
 
         var rooms = await _db.Rooms.AsNoTracking().Where(r => r.FloorId == id).ToListAsync();
         var desks = await _db.Desks.AsNoTracking().Where(d => d.FloorId == id).ToListAsync();
+        var meetingRooms = await _db.MeetingRooms.AsNoTracking().Where(m => m.FloorId == id).ToListAsync();
         var deskIds = desks.Select(d => d.Id).ToList();
         var assignments = await _db.Assignments.AsNoTracking()
             .Where(a => deskIds.Contains(a.DeskId))
@@ -180,7 +213,72 @@ public class FloorsController : ControllerBase
         {
             Rooms = rooms.Select(MapController.ToRoomDto).ToList(),
             Desks = desks.Select(d => MapController.ToDeskDto(d,
-                assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList()
+                assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList(),
+            MeetingRooms = meetingRooms.Select(MapController.ToMeetingRoomDto).ToList()
         });
+    }
+
+    // ---- План этажа (подложка) ----
+
+    private static readonly Dictionary<string, string> AllowedBackgroundTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["image/png"] = "image/png",
+        ["image/jpeg"] = "image/jpeg",
+        ["image/jpg"] = "image/jpeg",
+        ["image/svg+xml"] = "image/svg+xml"
+    };
+
+    private const long MaxBackgroundBytes = 10 * 1024 * 1024;
+
+    // GET подложки — в MapController: атрибуты [Authorize] аддитивны,
+    // и внутри этого контроллера эндпоинт требовал бы роль Admin.
+
+    [HttpPut("{id:guid}/background")]
+    [RequestSizeLimit(MaxBackgroundBytes + 1024)]
+    public async Task<IActionResult> UploadBackground(Guid id, IFormFile? file)
+    {
+        var floor = await _db.Floors.FindAsync(id);
+        if (floor == null)
+        {
+            return NotFound();
+        }
+        if (file == null || file.Length == 0)
+        {
+            return BadRequest(new { message = "Файл не передан" });
+        }
+        if (file.Length > MaxBackgroundBytes)
+        {
+            return StatusCode(StatusCodes.Status413PayloadTooLarge,
+                new { message = "Файл больше 10 МБ" });
+        }
+        if (!AllowedBackgroundTypes.TryGetValue(file.ContentType, out var storedType))
+        {
+            return StatusCode(StatusCodes.Status415UnsupportedMediaType,
+                new { message = "Поддерживаются PNG, JPEG и SVG" });
+        }
+
+        using var stream = new MemoryStream();
+        await file.CopyToAsync(stream);
+        floor.BackgroundImage = stream.ToArray();
+        floor.BackgroundContentType = storedType;
+        await _db.SaveChangesAsync();
+
+        return Ok();
+    }
+
+    [HttpDelete("{id:guid}/background")]
+    public async Task<IActionResult> DeleteBackground(Guid id)
+    {
+        var floor = await _db.Floors.FindAsync(id);
+        if (floor == null)
+        {
+            return NotFound();
+        }
+
+        floor.BackgroundImage = null;
+        floor.BackgroundContentType = null;
+        await _db.SaveChangesAsync();
+
+        return NoContent();
     }
 }

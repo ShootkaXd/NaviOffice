@@ -68,6 +68,7 @@ public class AuthController : ControllerBase
             DisplayName = User.FindFirst("name")?.Value ?? login,
             Department = EmptyToNull(User.FindFirst("department")?.Value),
             Title = EmptyToNull(User.FindFirst("title")?.Value),
+            Email = EmptyToNull(User.FindFirst("email")?.Value),
             Role = role
         });
     }
@@ -78,6 +79,7 @@ public class AuthController : ControllerBase
         DisplayName = user.DisplayName,
         Department = user.Department,
         Title = user.Title,
+        Email = user.Email,
         Role = user.Role
     };
 

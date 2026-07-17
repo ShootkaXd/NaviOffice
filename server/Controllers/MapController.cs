@@ -25,10 +25,18 @@ public class MapController : ControllerBase
     public async Task<ActionResult<MapResponse>> GetMap()
     {
         var floors = await _db.Floors.AsNoTracking()
+            .Select(f => new FloorDto
+            {
+                Id = f.Id,
+                Name = f.Name,
+                Order = f.Order,
+                HasBackground = f.BackgroundImage != null
+            })
             .OrderBy(f => f.Order).ThenBy(f => f.Name)
             .ToListAsync();
         var rooms = await _db.Rooms.AsNoTracking().ToListAsync();
         var desks = await _db.Desks.AsNoTracking().ToListAsync();
+        var meetingRooms = await _db.MeetingRooms.AsNoTracking().ToListAsync();
         var assignments = await _db.Assignments.AsNoTracking().ToListAsync();
 
         var assignmentDtos = new Dictionary<Guid, DeskAssignmentDto>();
@@ -39,11 +47,25 @@ public class MapController : ControllerBase
 
         return Ok(new MapResponse
         {
-            Floors = floors.Select(f => new FloorDto { Id = f.Id, Name = f.Name, Order = f.Order }).ToList(),
+            Floors = floors,
             Rooms = rooms.Select(ToRoomDto).ToList(),
             Desks = desks.Select(d => ToDeskDto(d,
-                assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList()
+                assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList(),
+            MeetingRooms = meetingRooms.Select(ToMeetingRoomDto).ToList()
         });
+    }
+
+    /// <summary>План этажа; в MapController, чтобы был доступен любой роли (FloorsController требует Admin).</summary>
+    [HttpGet("/api/floors/{id:guid}/background")]
+    public async Task<IActionResult> GetFloorBackground(Guid id)
+    {
+        var floor = await _db.Floors.AsNoTracking().FirstOrDefaultAsync(f => f.Id == id);
+        if (floor?.BackgroundImage == null || floor.BackgroundContentType == null)
+        {
+            return NotFound();
+        }
+
+        return File(floor.BackgroundImage, floor.BackgroundContentType);
     }
 
     internal static async Task<DeskAssignmentDto> BuildAssignmentDto(IEmployeeDirectory directory, Assignment assignment)
@@ -80,5 +102,19 @@ public class MapController : ControllerBase
         Name = desk.Name,
         Rotation = desk.Rotation,
         Assignment = assignment
+    };
+
+    internal static MeetingRoomDto ToMeetingRoomDto(MeetingRoom room) => new()
+    {
+        Id = room.Id,
+        FloorId = room.FloorId,
+        X = room.X,
+        Y = room.Y,
+        Width = room.Width,
+        Height = room.Height,
+        Name = room.Name,
+        Email = room.Email,
+        Capacity = room.Capacity,
+        Color = room.Color
     };
 }

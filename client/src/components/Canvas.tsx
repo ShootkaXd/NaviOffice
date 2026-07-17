@@ -1,11 +1,14 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
-import { useStore } from '../store';
+import { useStore, refreshStatuses } from '../store';
 import { useAuth } from '../auth';
-import { Desk, MapElement, Room } from '../types';
-import { uid, snap, lastName, initials, DESK_RADIUS, DESK_FREE_COLOR, DESK_OCCUPIED_COLOR, ROOM_COLORS } from '../utils';
+import { Desk, MapElement, MeetingRoom, Room, RoomStatus } from '../types';
+import { uid, snap, lastName, initials, DESK_RADIUS, DESK_FREE_COLOR, DESK_OCCUPIED_COLOR, ROOM_COLORS, MEETING_COLOR } from '../utils';
+import { fetchFloorBackground } from '../api';
 import { usePhoto } from './Avatar';
 import EmployeeCard from './EmployeeCard';
 import AssignDialog from './AssignDialog';
+import MeetingRoomCard from './MeetingRoomCard';
+import BookingDialog from './BookingDialog';
 import Legend from './Legend';
 
 const CANVAS_W = 2000;
@@ -13,6 +16,8 @@ const CANVAS_H = 1400;
 const HANDLE_SIZE = 7;
 const CARD_W = 256;
 const CARD_H = 280;
+const MEETING_CARD_W = 288;
+const MEETING_CARD_H = 330;
 
 interface DragState {
   type: 'move' | 'resize';
@@ -23,6 +28,7 @@ interface DragState {
 }
 
 interface DrawState {
+  kind: 'room' | 'meeting';
   startX: number;
   startY: number;
   currentX: number;
@@ -31,6 +37,12 @@ interface DrawState {
 
 interface CardState {
   deskId: string;
+  x: number;
+  y: number;
+}
+
+interface MeetingCardState {
+  roomId: string;
   x: number;
   y: number;
 }
@@ -183,6 +195,87 @@ function DeskNode({
   );
 }
 
+/** Переговорная на карте: прямоугольник с иконкой календаря и индикатором занятости. */
+function MeetingRoomNode({
+  room,
+  status,
+  isSelected,
+  canEdit,
+  onMouseDown,
+  onClick,
+}: {
+  room: MeetingRoom;
+  status: RoomStatus | undefined;
+  isSelected: boolean;
+  canEdit: boolean;
+  onMouseDown: (e: React.MouseEvent) => void;
+  onClick: (e: React.MouseEvent) => void;
+}) {
+  const dotColor = status ? (status.busy ? '#ef4444' : '#22c55e') : '#9ca3af';
+  return (
+    <g onMouseDown={onMouseDown} onClick={onClick} style={{ cursor: 'pointer' }}>
+      <rect
+        x={room.x}
+        y={room.y}
+        width={room.width}
+        height={room.height}
+        fill={room.color}
+        fillOpacity={0.12}
+        stroke={room.color}
+        strokeWidth={isSelected ? 2 : 1.5}
+        strokeOpacity={isSelected ? 1 : 0.8}
+        strokeDasharray={canEdit && isSelected ? undefined : '0'}
+        rx={6}
+      />
+      {/* Индикатор занятости */}
+      <circle
+        cx={room.x + room.width - 12}
+        cy={room.y + 12}
+        r={5}
+        fill={dotColor}
+        stroke="white"
+        strokeWidth={1.5}
+        pointerEvents="none"
+      />
+      {/* Иконка календаря */}
+      <g
+        transform={`translate(${room.x + room.width / 2 - 9}, ${room.y + room.height / 2 - 16})`}
+        pointerEvents="none"
+        opacity={0.55}
+      >
+        <rect x="0" y="2" width="18" height="15" rx="2" fill="none" stroke={room.color} strokeWidth="1.8" />
+        <line x1="0" y1="7" x2="18" y2="7" stroke={room.color} strokeWidth="1.8" />
+        <line x1="4.5" y1="0" x2="4.5" y2="4" stroke={room.color} strokeWidth="1.8" />
+        <line x1="13.5" y1="0" x2="13.5" y2="4" stroke={room.color} strokeWidth="1.8" />
+      </g>
+      <text
+        x={room.x + room.width / 2}
+        y={room.y + room.height / 2 + 14}
+        textAnchor="middle"
+        fontSize={11}
+        fill={room.color}
+        fontWeight="600"
+        pointerEvents="none"
+        style={{ userSelect: 'none' }}
+      >
+        {room.name}
+      </text>
+      <text
+        x={room.x + room.width / 2}
+        y={room.y + room.height / 2 + 27}
+        textAnchor="middle"
+        fontSize={9}
+        fill={room.color}
+        fillOpacity={0.6}
+        pointerEvents="none"
+        style={{ userSelect: 'none' }}
+      >
+        {room.capacity} мест
+      </text>
+    </g>
+  );
+}
+
 export default function Canvas() {
   const { state, dispatch } = useStore();
   const { user } = useAuth();
@@ -196,14 +289,39 @@ export default function Canvas() {
   const [pan, setPan] = useState<{ sx: number; sy: number; ox: number; oy: number } | null>(null);
   const [card, setCard] = useState<CardState | null>(null);
   const [assignFor, setAssignFor] = useState<string | null>(null);
+  const [meetingCard, setMeetingCard] = useState<MeetingCardState | null>(null);
+  const [bookingFor, setBookingFor] = useState<string | null>(null);
+  const [scheduleKey, setScheduleKey] = useState(0);
+  const [bgUrl, setBgUrl] = useState<string | null>(null);
 
   const currentElements = state.elements.filter((el) => el.floorId === state.currentFloorId);
+  const currentFloor = state.floors.find((f) => f.id === state.currentFloorId);
   const cardDesk = card
     ? (state.elements.find((el) => el.id === card.deskId && el.type === 'desk') as Desk | undefined)
     : undefined;
   const assignDeskEl = assignFor
     ? (state.elements.find((el) => el.id === assignFor && el.type === 'desk') as Desk | undefined)
     : undefined;
+  const meetingCardRoom = meetingCard
+    ? (state.elements.find((el) => el.id === meetingCard.roomId && el.type === 'meeting') as MeetingRoom | undefined)
+    : undefined;
+  const bookingRoom = bookingFor
+    ? (state.elements.find((el) => el.id === bookingFor && el.type === 'meeting') as MeetingRoom | undefined)
+    : undefined;
+
+  // Подложка (план этажа): качаем с токеном и кладём blob URL.
+  useEffect(() => {
+    let alive = true;
+    setBgUrl(null);
+    if (currentFloor?.hasBackground) {
+      fetchFloorBackground(currentFloor.id).then((url) => {
+        if (alive) setBgUrl(url);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [currentFloor?.id, currentFloor?.hasBackground]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
@@ -226,6 +344,8 @@ export default function Canvas() {
   useEffect(() => {
     setCard(null);
     setAssignFor(null);
+    setMeetingCard(null);
+    setBookingFor(null);
   }, [state.currentFloorId]);
 
   // Фокус на столе из поиска: подлететь и подсветить ~2 секунды.
@@ -260,10 +380,10 @@ export default function Canvas() {
       return;
     }
 
-    if (canEdit && state.tool === 'room') {
+    if (canEdit && (state.tool === 'room' || state.tool === 'meeting')) {
       const sx = snap(pt.x);
       const sy = snap(pt.y);
-      setDraw({ startX: sx, startY: sy, currentX: sx, currentY: sy });
+      setDraw({ kind: state.tool, startX: sx, startY: sy, currentX: sx, currentY: sy });
       return;
     }
 
@@ -287,6 +407,7 @@ export default function Canvas() {
     if ((e.target as SVGElement).id === 'canvas-bg') {
       dispatch({ type: 'SELECT', payload: null });
       setCard(null);
+      setMeetingCard(null);
     }
   }
 
@@ -320,8 +441,8 @@ export default function Canvas() {
             y: snap(orig.y + dy),
           } as MapElement,
         });
-      } else if (drag.type === 'resize' && drag.origEl.type === 'room') {
-        const orig = drag.origEl as Room;
+      } else if (drag.type === 'resize' && (drag.origEl.type === 'room' || drag.origEl.type === 'meeting')) {
+        const orig = drag.origEl as Room | MeetingRoom;
         let { x, y, width, height } = orig;
         const corner = drag.corner;
         if (corner === 'se') {
@@ -361,19 +482,38 @@ export default function Canvas() {
       if (minW > 20 && minH > 20 && state.currentFloorId) {
         const x = Math.min(draw.startX, draw.currentX);
         const y = Math.min(draw.startY, draw.currentY);
-        const room: Room = {
-          id: 'tmp-' + uid(),
-          type: 'room',
-          x,
-          y,
-          width: Math.abs(draw.currentX - draw.startX),
-          height: Math.abs(draw.currentY - draw.startY),
-          name: `Комната ${currentElements.filter((el) => el.type === 'room').length + 1}`,
-          color: ROOM_COLORS[Math.floor(Math.random() * ROOM_COLORS.length)],
-          capacity: 4,
-          floorId: state.currentFloorId,
-        };
-        dispatch({ type: 'ADD_ELEMENT', payload: room });
+        const width = Math.abs(draw.currentX - draw.startX);
+        const height = Math.abs(draw.currentY - draw.startY);
+        if (draw.kind === 'meeting') {
+          const meeting: MeetingRoom = {
+            id: 'tmp-' + uid(),
+            type: 'meeting',
+            x,
+            y,
+            width,
+            height,
+            name: `Переговорная ${currentElements.filter((el) => el.type === 'meeting').length + 1}`,
+            email: null,
+            capacity: 6,
+            color: MEETING_COLOR,
+            floorId: state.currentFloorId,
+          };
+          dispatch({ type: 'ADD_ELEMENT', payload: meeting });
+        } else {
+          const room: Room = {
+            id: 'tmp-' + uid(),
+            type: 'room',
+            x,
+            y,
+            width,
+            height,
+            name: `Комната ${currentElements.filter((el) => el.type === 'room').length + 1}`,
+            color: ROOM_COLORS[Math.floor(Math.random() * ROOM_COLORS.length)],
+            capacity: 4,
+            floorId: state.currentFloorId,
+          };
+          dispatch({ type: 'ADD_ELEMENT', payload: room });
+        }
       }
       setDraw(null);
       return;
@@ -386,7 +526,10 @@ export default function Canvas() {
 
   function onElementMouseDown(e: React.MouseEvent, el: MapElement) {
     e.stopPropagation();
-    if (el.type === 'room') setCard(null);
+    if (el.type === 'room') {
+      setCard(null);
+      setMeetingCard(null);
+    }
     if (!canEdit || state.tool !== 'select') return;
     dispatch({ type: 'SELECT', payload: el.id });
     const pt = getSVGPoint(e.clientX, e.clientY);
@@ -402,6 +545,7 @@ export default function Canvas() {
     }
     if (canEdit && state.tool !== 'select') return;
     dispatch({ type: 'SELECT', payload: desk.id });
+    setMeetingCard(null);
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const x = Math.min(Math.max(e.clientX - rect.left + 14, 8), Math.max(8, rect.width - CARD_W - 8));
@@ -409,9 +553,25 @@ export default function Canvas() {
     setCard({ deskId: desk.id, x, y });
   }
 
+  function onMeetingClick(e: React.MouseEvent, room: MeetingRoom) {
+    e.stopPropagation();
+    if (movedRef.current) {
+      movedRef.current = false;
+      return;
+    }
+    if (canEdit && state.tool !== 'select') return;
+    dispatch({ type: 'SELECT', payload: room.id });
+    setCard(null);
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.min(Math.max(e.clientX - rect.left + 14, 8), Math.max(8, rect.width - MEETING_CARD_W - 8));
+    const y = Math.min(Math.max(e.clientY - rect.top - 24, 8), Math.max(8, rect.height - MEETING_CARD_H - 8));
+    setMeetingCard({ roomId: room.id, x, y });
+  }
+
   function onHandleMouseDown(
     e: React.MouseEvent,
-    el: Room,
+    el: Room | MeetingRoom,
     corner: 'nw' | 'ne' | 'sw' | 'se'
   ) {
     e.stopPropagation();
@@ -436,7 +596,7 @@ export default function Canvas() {
   const vb = `${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`;
 
   const cursorStyle =
-    canEdit && state.tool === 'room' ? 'crosshair' :
+    canEdit && (state.tool === 'room' || state.tool === 'meeting') ? 'crosshair' :
     canEdit && state.tool === 'desk' ? 'cell' :
     drag ? 'grabbing' :
     'default';
@@ -485,6 +645,20 @@ export default function Canvas() {
           stroke="#ddd"
           strokeWidth={1}
         />
+
+        {/* План этажа (подложка) */}
+        {bgUrl && (
+          <image
+            href={bgUrl}
+            x={0}
+            y={0}
+            width={CANVAS_W}
+            height={CANVAS_H}
+            preserveAspectRatio="xMidYMid meet"
+            opacity={0.6}
+            pointerEvents="none"
+          />
+        )}
 
         {/* Rooms */}
         {currentElements.filter((el) => el.type === 'room').map((el) => {
@@ -570,6 +744,55 @@ export default function Canvas() {
           );
         })}
 
+        {/* Meeting rooms */}
+        {currentElements.filter((el) => el.type === 'meeting').map((el) => {
+          const meeting = el as MeetingRoom;
+          const isSelected = state.selectedId === meeting.id;
+          return (
+            <g key={meeting.id}>
+              <MeetingRoomNode
+                room={meeting}
+                status={state.roomStatuses[meeting.id]}
+                isSelected={isSelected}
+                canEdit={canEdit}
+                onMouseDown={(e) => onElementMouseDown(e, meeting)}
+                onClick={(e) => onMeetingClick(e, meeting)}
+              />
+              {canEdit && isSelected && state.tool === 'select' && (
+                <>
+                  {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
+                    const hx =
+                      corner === 'nw' || corner === 'sw'
+                        ? meeting.x - HANDLE_SIZE / 2
+                        : meeting.x + meeting.width - HANDLE_SIZE / 2;
+                    const hy =
+                      corner === 'nw' || corner === 'ne'
+                        ? meeting.y - HANDLE_SIZE / 2
+                        : meeting.y + meeting.height - HANDLE_SIZE / 2;
+                    const cur =
+                      corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize';
+                    return (
+                      <rect
+                        key={corner}
+                        x={hx}
+                        y={hy}
+                        width={HANDLE_SIZE}
+                        height={HANDLE_SIZE}
+                        fill="white"
+                        stroke="#6366f1"
+                        strokeWidth={1.5}
+                        rx={1}
+                        style={{ cursor: cur }}
+                        onMouseDown={(e) => onHandleMouseDown(e, meeting, corner)}
+                      />
+                    );
+                  })}
+                </>
+              )}
+            </g>
+          );
+        })}
+
         {/* Desks */}
         {currentElements.filter((el) => el.type === 'desk').map((el) => {
           const desk = el as Desk;
@@ -619,6 +842,31 @@ export default function Canvas() {
         <AssignDialog desk={assignDeskEl} onClose={() => setAssignFor(null)} />
       )}
 
+      {/* Meeting room card popup */}
+      {meetingCardRoom && meetingCard && (
+        <MeetingRoomCard
+          room={meetingCardRoom}
+          status={state.roomStatuses[meetingCardRoom.id]}
+          x={meetingCard.x}
+          y={meetingCard.y}
+          refreshKey={scheduleKey}
+          onClose={() => setMeetingCard(null)}
+          onBook={() => setBookingFor(meetingCardRoom.id)}
+        />
+      )}
+
+      {/* Booking dialog */}
+      {bookingRoom && (
+        <BookingDialog
+          room={bookingRoom}
+          onClose={() => setBookingFor(null)}
+          onBooked={() => {
+            setScheduleKey((k) => k + 1);
+            refreshStatuses(dispatch);
+          }}
+        />
+      )}
+
       {/* Legend */}
       <Legend />
 
@@ -657,6 +905,11 @@ export default function Canvas() {
         {canEdit && state.tool === 'desk' && (
           <div className="bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
             Кликните по карте, чтобы поставить стол
+          </div>
+        )}
+        {canEdit && state.tool === 'meeting' && (
+          <div className="bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
+            Нарисуйте переговорную, зажав кнопку мыши
           </div>
         )}
       </div>

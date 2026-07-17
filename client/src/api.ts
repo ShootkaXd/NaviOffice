@@ -1,4 +1,4 @@
-import { Desk, DeskAssignment, Employee, Floor, MapElement, Room, User } from './types';
+import { BookingItem, Desk, DeskAssignment, Employee, Floor, MapElement, MeetingRoom, Room, RoomStatus, User } from './types';
 
 const TOKEN_KEY = 'navioffice_token';
 
@@ -42,7 +42,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     throw new ApiError(401, 'Unauthorized');
   }
   if (!res.ok) {
-    throw new ApiError(res.status, `${res.status} ${res.statusText}`);
+    // Сервер кладёт человекочитаемое сообщение в { message }.
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // тело не JSON — оставляем статусную строку
+    }
+    throw new ApiError(res.status, message);
   }
   const text = await res.text();
   return (text ? JSON.parse(text) : undefined) as T;
@@ -113,10 +121,24 @@ interface DeskDto {
   assignment: DeskAssignment | null;
 }
 
+interface MeetingRoomDto {
+  id: string;
+  floorId: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name: string;
+  email: string | null;
+  capacity: number;
+  color: string;
+}
+
 interface MapDto {
   floors: Floor[];
   rooms: RoomDto[];
   desks: DeskDto[];
+  meetingRooms: MeetingRoomDto[];
 }
 
 export interface MapData {
@@ -133,7 +155,12 @@ export async function getMap(): Promise<MapData> {
     assignment: d.assignment ?? null,
     type: 'desk',
   }));
-  return { floors: dto.floors, elements: [...rooms, ...desks] };
+  const meetingRooms: MeetingRoom[] = (dto.meetingRooms ?? []).map((m) => ({
+    ...m,
+    email: m.email ?? null,
+    type: 'meeting',
+  }));
+  return { floors: dto.floors, elements: [...rooms, ...desks, ...meetingRooms] };
 }
 
 // ---------- Floors ----------
@@ -177,7 +204,94 @@ export function saveFloorElements(floorId: string, elements: MapElement[]): Prom
       name: d.name,
       rotation: d.rotation,
     }));
-  return request(`/api/floors/${floorId}/elements`, { method: 'PUT', body: JSON.stringify({ rooms, desks }) });
+  const meetingRooms = elements
+    .filter((el): el is MeetingRoom => el.type === 'meeting')
+    .map((m) => ({
+      ...(isClientId(m.id) ? {} : { id: m.id }),
+      x: m.x,
+      y: m.y,
+      width: m.width,
+      height: m.height,
+      name: m.name,
+      email: m.email,
+      capacity: m.capacity,
+      color: m.color,
+    }));
+  return request(`/api/floors/${floorId}/elements`, {
+    method: 'PUT',
+    body: JSON.stringify({ rooms, desks, meetingRooms }),
+  });
+}
+
+// ---------- Бронирование переговорных ----------
+
+export function getMeetingRoomStatuses(): Promise<RoomStatus[]> {
+  return request('/api/meetingrooms/status');
+}
+
+export function getMeetingRoomSchedule(roomId: string, dateISO: string): Promise<{ items: BookingItem[] }> {
+  return request(`/api/meetingrooms/${roomId}/schedule?date=${encodeURIComponent(dateISO)}`);
+}
+
+export function createBooking(roomId: string, start: string, end: string, subject: string): Promise<void> {
+  return request(`/api/meetingrooms/${roomId}/bookings`, {
+    method: 'POST',
+    body: JSON.stringify({ start, end, subject }),
+  });
+}
+
+// ---------- План этажа (подложка) ----------
+
+const backgroundCache = new Map<string, Promise<string | null>>();
+
+export function fetchFloorBackground(floorId: string): Promise<string | null> {
+  let cached = backgroundCache.get(floorId);
+  if (!cached) {
+    cached = (async () => {
+      const token = getToken();
+      const res = await fetch(`/api/floors/${floorId}/background`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return URL.createObjectURL(blob);
+    })().catch(() => null);
+    backgroundCache.set(floorId, cached);
+  }
+  return cached;
+}
+
+function invalidateBackground(floorId: string) {
+  const cached = backgroundCache.get(floorId);
+  backgroundCache.delete(floorId);
+  cached?.then((url) => url && URL.revokeObjectURL(url));
+}
+
+export async function uploadFloorBackground(floorId: string, file: File): Promise<void> {
+  const token = getToken();
+  const form = new FormData();
+  form.append('file', file);
+  const res = await fetch(`/api/floors/${floorId}/background`, {
+    method: 'PUT',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const body = await res.json();
+      if (body?.message) message = body.message;
+    } catch {
+      // не JSON
+    }
+    throw new ApiError(res.status, message);
+  }
+  invalidateBackground(floorId);
+}
+
+export async function deleteFloorBackground(floorId: string): Promise<void> {
+  await request(`/api/floors/${floorId}/background`, { method: 'DELETE' });
+  invalidateBackground(floorId);
 }
 
 // ---------- Assignments ----------

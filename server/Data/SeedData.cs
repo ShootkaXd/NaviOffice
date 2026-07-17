@@ -31,7 +31,20 @@ public static class SeedData
             Capacity = 8
         };
 
-        var meetingRoom = new Room
+        var kitchen = new Room
+        {
+            Id = Guid.NewGuid(),
+            FloorId = floor.Id,
+            X = 600,
+            Y = 260,
+            Width = 260,
+            Height = 120,
+            Name = "Кухня",
+            Color = "#DCFCE7",
+            Capacity = 6
+        };
+
+        var meetingRoom = new MeetingRoom
         {
             Id = Guid.NewGuid(),
             FloorId = floor.Id,
@@ -39,9 +52,9 @@ public static class SeedData
             Y = 40,
             Width = 260,
             Height = 200,
-            Name = "Переговорная",
-            Color = "#DCFCE7",
-            Capacity = 6
+            Name = "Переговорная А",
+            Capacity = 8,
+            Color = "#8b5cf6"
         };
 
         var desks = new List<Desk>();
@@ -61,7 +74,8 @@ public static class SeedData
         }
 
         db.Floors.Add(floor);
-        db.Rooms.AddRange(openSpace, meetingRoom);
+        db.Rooms.AddRange(openSpace, kitchen);
+        db.MeetingRooms.Add(meetingRoom);
         db.Desks.AddRange(desks);
         db.SaveChanges();
     }

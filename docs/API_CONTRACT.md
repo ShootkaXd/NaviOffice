@@ -48,3 +48,49 @@ JWT Bearer. Токен содержит claims: `sub` (login), `name` (displayNa
 - CORS: разрешить http://localhost:5173 (dev).
 - Сервер слушает :5000. Клиент проксирует `/api` на :5000 (vite proxy).
 - Seed при первом запуске: 1 этаж "Этаж 1" с примером (2 комнаты, 6 столов).
+
+---
+
+# v2 — Переговорные, бронирование через Outlook, планы этажей
+
+## MeetingRoom (новый элемент карты)
+Модель: Id (guid), FloorId (FK, cascade), X, Y, Width, Height, Name, Email (nullable — почта room mailbox в Exchange), Capacity, Color (default #8b5cf6).
+
+- GET /api/map → добавляется `meetingRooms: [{id, floorId, x, y, width, height, name, email, capacity, color}]` (без live-статуса — он отдельным эндпоинтом).
+- PUT /api/floors/{id}/elements → тело дополняется `meetingRooms: [{id?, x, y, width, height, name, email, capacity, color}]`; та же семантика bulk replace: существующие id сохраняются (и их брони в Demo-режиме), отсутствующие удаляются.
+
+## Бронирование (`Booking:Mode` = `Demo` | `Graph`)
+| Метод | Путь | Роль | Описание |
+|---|---|---|---|
+| GET | /api/meetingrooms/status | any | `[{id, busy, until}]` — busy=true если сейчас идёт встреча, until = ISO-время конца текущей встречи (busy) или начала следующей (free, null если сегодня встреч больше нет). Кэш 60 сек. |
+| GET | /api/meetingrooms/{id}/schedule?date=YYYY-MM-DD | any | `{items: [{start, end, subject, organizer}]}` — брони за день, ISO 8601 |
+| POST | /api/meetingrooms/{id}/bookings | any | `{start, end, subject}` → 201; 409 если время пересекается с существующей бронью; 400 если start>=end или в прошлом |
+
+**Demo-режим**: таблица SQLite `Bookings {Id, MeetingRoomId (FK cascade), Start, End, Subject, OrganizerLogin, OrganizerName}`. Проверка пересечения интервалов. Organizer из JWT.
+
+**Graph-режим** (Outlook / Microsoft 365 / Exchange):
+- Конфиг `Graph:TenantId, ClientId, ClientSecret` — app-only client credentials, токен по `https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token` (scope `https://graph.microsoft.com/.default`), кэш до истечения. Реализация на HttpClient (IHttpClientFactory), без тяжёлых SDK.
+- Занятость: POST `/v1.0/users/{roomEmail}/calendar/getSchedule` (schedules=[roomEmail], start/end дня).
+- Бронь: POST `/v1.0/users/{userEmail}/events` — событие в календаре сотрудника с переговорной как attendee `type: "resource"` (room mailbox сам подтверждает и попадает в Outlook). userEmail — из claim email JWT (LDAP mail).
+- Ошибки Graph логировать; клиенту 502 с текстом.
+
+## JWT
+Добавить claim `email` (LDAP mail; в Demo — `{login}@demo.local`).
+
+## План этажа (подложка)
+Floor дополняется: `BackgroundImage (byte[], nullable)`, `BackgroundContentType (string, nullable)`.
+| Метод | Путь | Роль | Описание |
+|---|---|---|---|
+| GET | /api/floors/{id}/background | any (auth) | image/png|jpeg|svg+xml или 404 |
+| PUT | /api/floors/{id}/background | Admin | multipart/form-data, поле `file`; типы png/jpg/jpeg/svg, максимум 10 МБ; 415 при другом типе |
+| DELETE | /api/floors/{id}/background | Admin | убрать подложку |
+
+GET /api/map: floors получают `hasBackground: bool`.
+
+## Клиент v2
+- Инструмент «Переговорная» в тулбаре (Admin): рисуется как комната, стиль отличen — фиолетовый по умолчанию, иконка календаря, имя + вместимость.
+- Статусы переговорных на карте: точка/заливка — зелёная (свободна), красная (идёт встреча); поллинг /api/meetingrooms/status каждые 60 сек + рефреш после брони.
+- Клик по переговорной (любая роль) → карточка: название, вместимость, статус («Свободна до 15:00» / «Занята до 14:30»), таймлайн броней на сегодня, кнопка «Забронировать».
+- Диалог брони: дата (default сегодня), время с/до (шаг 15 мин), тема; 409 → «Это время уже занято».
+- PropertiesPanel переговорной (Admin): название, email переговорной (подсказка: почта room mailbox из Exchange), вместимость, цвет.
+- Подложка: для Admin кнопка «План этажа…» (upload) + «Убрать план»; рендер в SVG `<image>` под сеткой (загрузка через authenticated fetch → blob URL, как фото сотрудников).

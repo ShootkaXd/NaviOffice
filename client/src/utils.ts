@@ -15,6 +15,7 @@ export const ROOM_COLORS = [
 
 export const DESK_FREE_COLOR = '#22c55e';
 export const DESK_OCCUPIED_COLOR = '#6366f1';
+export const MEETING_COLOR = '#8b5cf6';
 
 export function initials(displayName: string) {
   return displayName

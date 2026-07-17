@@ -1,4 +1,4 @@
-import { DESK_FREE_COLOR, DESK_OCCUPIED_COLOR } from '../utils';
+import { DESK_FREE_COLOR, DESK_OCCUPIED_COLOR, MEETING_COLOR } from '../utils';
 
 export default function Legend() {
   return (
@@ -16,6 +16,13 @@ export default function Legend() {
           style={{ borderColor: DESK_OCCUPIED_COLOR, background: DESK_OCCUPIED_COLOR }}
         />
         Занято
+      </div>
+      <div className="flex items-center gap-2">
+        <span
+          className="w-3 h-3 rounded border-2 flex-shrink-0"
+          style={{ borderColor: MEETING_COLOR, background: `${MEETING_COLOR}22` }}
+        />
+        Переговорная
       </div>
       <div className="flex items-center gap-2">
         <span className="w-3 h-3 rounded-full border-2 border-dashed border-accent flex-shrink-0" />

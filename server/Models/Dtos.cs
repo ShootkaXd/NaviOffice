@@ -14,6 +14,7 @@ public class UserDto
     public string DisplayName { get; set; } = "";
     public string? Department { get; set; }
     public string? Title { get; set; }
+    public string? Email { get; set; }
     public string Role { get; set; } = "User";
 }
 
@@ -42,6 +43,7 @@ public class FloorDto
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
     public int Order { get; set; }
+    public bool HasBackground { get; set; }
 }
 
 public class RoomDto
@@ -76,11 +78,26 @@ public class DeskDto
     public DeskAssignmentDto? Assignment { get; set; }
 }
 
+public class MeetingRoomDto
+{
+    public Guid Id { get; set; }
+    public Guid FloorId { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
+    public string Name { get; set; } = "";
+    public string? Email { get; set; }
+    public int Capacity { get; set; }
+    public string Color { get; set; } = "#8b5cf6";
+}
+
 public class MapResponse
 {
     public List<FloorDto> Floors { get; set; } = new();
     public List<RoomDto> Rooms { get; set; } = new();
     public List<DeskDto> Desks { get; set; } = new();
+    public List<MeetingRoomDto> MeetingRooms { get; set; } = new();
 }
 
 // ---- Floors ----
@@ -117,16 +134,61 @@ public class DeskElementDto
     public double Rotation { get; set; }
 }
 
+public class MeetingRoomElementDto
+{
+    public Guid? Id { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public double Width { get; set; }
+    public double Height { get; set; }
+    public string Name { get; set; } = "";
+    public string? Email { get; set; }
+    public int Capacity { get; set; }
+    public string Color { get; set; } = "#8b5cf6";
+}
+
 public class FloorElementsRequest
 {
     public List<RoomElementDto> Rooms { get; set; } = new();
     public List<DeskElementDto> Desks { get; set; } = new();
+    public List<MeetingRoomElementDto> MeetingRooms { get; set; } = new();
 }
 
 public class FloorElementsResponse
 {
     public List<RoomDto> Rooms { get; set; } = new();
     public List<DeskDto> Desks { get; set; } = new();
+    public List<MeetingRoomDto> MeetingRooms { get; set; } = new();
+}
+
+// ---- Booking ----
+
+public class RoomStatusDto
+{
+    public Guid Id { get; set; }
+    public bool Busy { get; set; }
+    /// <summary>Занята: конец текущей встречи. Свободна: начало следующей (null — сегодня встреч больше нет).</summary>
+    public DateTime? Until { get; set; }
+}
+
+public class BookingItemDto
+{
+    public DateTime Start { get; set; }
+    public DateTime End { get; set; }
+    public string Subject { get; set; } = "";
+    public string Organizer { get; set; } = "";
+}
+
+public class ScheduleResponse
+{
+    public List<BookingItemDto> Items { get; set; } = new();
+}
+
+public class CreateBookingRequest
+{
+    public DateTime Start { get; set; }
+    public DateTime End { get; set; }
+    public string Subject { get; set; } = "";
 }
 
 // ---- Desks ----

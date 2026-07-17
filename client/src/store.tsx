@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, ReactNode } from 'react';
 import { AppState, Action } from './types';
-import { getMap } from './api';
+import { getMap, getMeetingRoomStatuses } from './api';
 
 const initialState: AppState = {
   floors: [],
@@ -9,6 +9,7 @@ const initialState: AppState = {
   selectedId: null,
   tool: 'select',
   focusDeskId: null,
+  roomStatuses: {},
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -44,6 +45,11 @@ function reducer(state: AppState, action: Action): AppState {
     }
     case 'FOCUS_DESK':
       return { ...state, focusDeskId: action.payload };
+    case 'SET_STATUSES': {
+      const roomStatuses: AppState['roomStatuses'] = {};
+      for (const s of action.payload) roomStatuses[s.id] = s;
+      return { ...state, roomStatuses };
+    }
     default:
       return state;
   }
@@ -56,6 +62,16 @@ export async function refreshMap(dispatch: React.Dispatch<Action>) {
     dispatch({ type: 'SET_MAP', payload: map });
   } catch (err) {
     console.error('Не удалось загрузить карту', err);
+  }
+}
+
+/** Обновить статусы занятости переговорных. */
+export async function refreshStatuses(dispatch: React.Dispatch<Action>) {
+  try {
+    const statuses = await getMeetingRoomStatuses();
+    dispatch({ type: 'SET_STATUSES', payload: statuses });
+  } catch (err) {
+    console.error('Не удалось загрузить статусы переговорных', err);
   }
 }
 

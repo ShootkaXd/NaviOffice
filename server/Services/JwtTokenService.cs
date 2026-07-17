@@ -36,6 +36,7 @@ public class JwtTokenService
             new("role", user.Role),
             new("department", user.Department ?? ""),
             new("title", user.Title ?? ""),
+            new("email", user.Email ?? ""),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString("N"))
         };
 

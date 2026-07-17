@@ -1,4 +1,4 @@
-export type ToolType = 'select' | 'room' | 'desk';
+export type ToolType = 'select' | 'room' | 'desk' | 'meeting';
 
 export type Role = 'Admin' | 'Secretary' | 'User';
 
@@ -7,6 +7,7 @@ export interface User {
   displayName: string;
   department: string;
   title: string;
+  email: string | null;
   role: Role;
 }
 
@@ -50,12 +51,41 @@ export interface Desk {
   floorId: string;
 }
 
-export type MapElement = Room | Desk;
+export interface MeetingRoom {
+  id: string;
+  type: 'meeting';
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  name: string;
+  email: string | null;
+  capacity: number;
+  color: string;
+  floorId: string;
+}
+
+export type MapElement = Room | Desk | MeetingRoom;
 
 export interface Floor {
   id: string;
   name: string;
   order: number;
+  hasBackground: boolean;
+}
+
+/** Текущий статус переговорной: занята до / свободна до. */
+export interface RoomStatus {
+  id: string;
+  busy: boolean;
+  until: string | null;
+}
+
+export interface BookingItem {
+  start: string;
+  end: string;
+  subject: string;
+  organizer: string;
 }
 
 export interface AppState {
@@ -65,6 +95,7 @@ export interface AppState {
   selectedId: string | null;
   tool: ToolType;
   focusDeskId: string | null;
+  roomStatuses: Record<string, RoomStatus>;
 }
 
 export type Action =
@@ -75,4 +106,5 @@ export type Action =
   | { type: 'SELECT'; payload: string | null }
   | { type: 'SET_FLOOR'; payload: string }
   | { type: 'SET_MAP'; payload: { floors: Floor[]; elements: MapElement[] } }
-  | { type: 'FOCUS_DESK'; payload: string | null };
+  | { type: 'FOCUS_DESK'; payload: string | null }
+  | { type: 'SET_STATUSES'; payload: RoomStatus[] };

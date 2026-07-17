@@ -33,6 +33,18 @@ else
 builder.Services.AddSingleton<IEmployeeDirectory, CachedEmployeeDirectory>();
 builder.Services.AddSingleton<JwtTokenService>();
 
+// --- Booking (Outlook/Graph or Demo) ---
+builder.Services.AddHttpClient();
+var bookingMode = builder.Configuration["Booking:Mode"] ?? "Demo";
+if (string.Equals(bookingMode, "Graph", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddSingleton<IBookingService, GraphBookingService>();
+}
+else
+{
+    builder.Services.AddScoped<IBookingService, DemoBookingService>();
+}
+
 // --- Auth ---
 var jwtKey = JwtTokenService.ResolveKey(builder.Configuration);
 builder.Services
@@ -74,6 +86,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
+    SchemaUpgrade.Apply(db); // доводит существующую v1-базу до v2-схемы
     SeedData.EnsureSeeded(db);
 }
 

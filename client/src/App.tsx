@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { StoreProvider, useStore, refreshMap } from './store';
+import { StoreProvider, useStore, refreshMap, refreshStatuses } from './store';
 import { AuthProvider, useAuth } from './auth';
 import TopBar from './components/TopBar';
 import Toolbar from './components/Toolbar';
@@ -15,6 +15,9 @@ function Workspace() {
 
   useEffect(() => {
     refreshMap(dispatch);
+    refreshStatuses(dispatch);
+    const interval = setInterval(() => refreshStatuses(dispatch), 60_000);
+    return () => clearInterval(interval);
   }, [dispatch]);
 
   return (
