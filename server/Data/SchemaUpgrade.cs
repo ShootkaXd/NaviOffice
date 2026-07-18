@@ -1,5 +1,6 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+
+#pragma warning disable EF1002 // имена таблиц/колонок — константы из кода, пользовательский ввод сюда не попадает
 
 namespace NaviOffice.Api.Data;
 
@@ -42,7 +43,7 @@ public static class SchemaUpgrade
         db.Database.ExecuteSqlRaw("""ALTER TABLE "Bookings" ADD COLUMN IF NOT EXISTS "AttendeesJson" text NULL;""");
     }
 
-    // ---- SQLite: ADD COLUMN IF NOT EXISTS нет — ловим "duplicate column" ----
+    // ---- SQLite: ADD COLUMN IF NOT EXISTS нет — проверяем pragma_table_info ----
 
     private static void ApplySqlite(AppDbContext db)
     {
@@ -103,13 +104,13 @@ public static class SchemaUpgrade
 
     private static void AddColumnIfMissing(AppDbContext db, string table, string column, string definition)
     {
-        try
+        var exists = db.Database
+            .SqlQueryRaw<int>($"SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('{table}') WHERE \"name\" = '{column}'")
+            .AsEnumerable()
+            .First() > 0;
+        if (!exists)
         {
             db.Database.ExecuteSqlRaw($"ALTER TABLE \"{table}\" ADD COLUMN \"{column}\" {definition};");
-        }
-        catch (SqliteException ex) when (ex.SqliteErrorCode == 1 && ex.Message.Contains("duplicate column", StringComparison.OrdinalIgnoreCase))
-        {
-            // колонка уже есть — база актуальна
         }
     }
 }
