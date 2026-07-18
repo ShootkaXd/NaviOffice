@@ -7,7 +7,7 @@ import { fetchFloorBackground } from '../api';
 import { usePhoto } from './Avatar';
 import EmployeeCard from './EmployeeCard';
 import AssignDialog from './AssignDialog';
-import MeetingRoomCard from './MeetingRoomCard';
+import MeetingRoomCard, { BookingPrefill } from './MeetingRoomCard';
 import BookingDialog from './BookingDialog';
 import Legend from './Legend';
 
@@ -320,6 +320,7 @@ export default function Canvas() {
   const [assignFor, setAssignFor] = useState<string | null>(null);
   const [meetingCard, setMeetingCard] = useState<MeetingCardState | null>(null);
   const [bookingFor, setBookingFor] = useState<string | null>(null);
+  const [bookingPrefill, setBookingPrefill] = useState<BookingPrefill | undefined>(undefined);
   const [scheduleKey, setScheduleKey] = useState(0);
   const [bgUrl, setBgUrl] = useState<string | null>(null);
 
@@ -1050,16 +1051,21 @@ export default function Canvas() {
         <AssignDialog desk={assignDeskEl} onClose={() => setAssignFor(null)} />
       )}
 
-      {/* Meeting room card popup */}
+      {/* Панель переговорной */}
       {meetingCardRoom && meetingCard && (
         <MeetingRoomCard
           room={meetingCardRoom}
           status={state.roomStatuses[meetingCardRoom.id]}
-          x={meetingCard.x}
-          y={meetingCard.y}
           refreshKey={scheduleKey}
           onClose={() => setMeetingCard(null)}
-          onBook={() => setBookingFor(meetingCardRoom.id)}
+          onBook={(prefill) => {
+            setBookingPrefill(prefill);
+            setBookingFor(meetingCardRoom.id);
+          }}
+          onBooked={() => {
+            setScheduleKey((k) => k + 1);
+            refreshStatuses(dispatch);
+          }}
         />
       )}
 
@@ -1067,7 +1073,11 @@ export default function Canvas() {
       {bookingRoom && (
         <BookingDialog
           room={bookingRoom}
-          onClose={() => setBookingFor(null)}
+          initial={bookingPrefill}
+          onClose={() => {
+            setBookingFor(null);
+            setBookingPrefill(undefined);
+          }}
           onBooked={() => {
             setScheduleKey((k) => k + 1);
             refreshStatuses(dispatch);

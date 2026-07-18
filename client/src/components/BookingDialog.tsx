@@ -8,6 +8,8 @@ interface BookingDialogProps {
   room: MeetingRoom;
   onClose: () => void;
   onBooked: () => void;
+  /** Предзаполнение (клик по «+» на таймлайне). */
+  initial?: { date: string; start: string; end: string };
 }
 
 /** Слоты 08:00–20:00 с шагом 15 минут. */
@@ -24,10 +26,10 @@ function todayISO() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function BookingDialog({ room, onClose, onBooked }: BookingDialogProps) {
-  const [date, setDate] = useState(todayISO());
-  const [start, setStart] = useState('10:00');
-  const [end, setEnd] = useState('11:00');
+export default function BookingDialog({ room, onClose, onBooked, initial }: BookingDialogProps) {
+  const [date, setDate] = useState(initial?.date ?? todayISO());
+  const [start, setStart] = useState(initial?.start ?? '10:00');
+  const [end, setEnd] = useState(initial?.end ?? '11:00');
   const [subject, setSubject] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -147,6 +149,19 @@ export default function BookingDialog({ room, onClose, onBooked }: BookingDialog
             </select>
           </label>
         </div>
+
+        {end > start && (
+          <div className="text-[11px] text-gray-400 -mt-1 mb-3">
+            Длительность: {(() => {
+              const [sh, sm] = start.split(':').map(Number);
+              const [eh, em] = end.split(':').map(Number);
+              const mins = eh * 60 + em - sh * 60 - sm;
+              const h = Math.floor(mins / 60);
+              const m = mins % 60;
+              return h > 0 ? (m > 0 ? `${h} ч ${m} мин` : `${h} ч`) : `${m} мин`;
+            })()}
+          </div>
+        )}
 
         <label className="block mb-3">
           <span className="text-xs text-gray-500 block mb-1">Тема встречи</span>
