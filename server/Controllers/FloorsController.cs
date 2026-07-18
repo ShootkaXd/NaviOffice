@@ -96,6 +96,7 @@ public class FloorsController : ControllerBase
         var existingRooms = await _db.Rooms.Where(r => r.FloorId == id).ToListAsync();
         var existingDesks = await _db.Desks.Where(d => d.FloorId == id).ToListAsync();
         var existingMeetingRooms = await _db.MeetingRooms.Where(m => m.FloorId == id).ToListAsync();
+        var existingMarkers = await _db.Markers.Where(m => m.FloorId == id).ToListAsync();
 
         // --- Rooms ---
         var keptRoomIds = request.Rooms
@@ -125,6 +126,7 @@ public class FloorsController : ControllerBase
             room.Name = dto.Name;
             room.Color = dto.Color;
             room.Capacity = dto.Capacity;
+            room.PointsJson = MapController.SerializePoints(dto.Points);
         }
 
         // --- Desks ---
@@ -194,11 +196,39 @@ public class FloorsController : ControllerBase
             meetingRoom.Color = dto.Color;
         }
 
+        // --- Markers ---
+        var keptMarkerIds = request.Markers
+            .Where(m => m.Id.HasValue)
+            .Select(m => m.Id!.Value)
+            .ToHashSet();
+        _db.Markers.RemoveRange(existingMarkers.Where(m => !keptMarkerIds.Contains(m.Id)));
+
+        var markersById = existingMarkers.ToDictionary(m => m.Id);
+        foreach (var dto in request.Markers)
+        {
+            Marker marker;
+            if (dto.Id.HasValue && markersById.TryGetValue(dto.Id.Value, out var existing))
+            {
+                marker = existing;
+            }
+            else
+            {
+                marker = new Marker { Id = dto.Id ?? Guid.NewGuid(), FloorId = id };
+                _db.Markers.Add(marker);
+            }
+
+            marker.X = dto.X;
+            marker.Y = dto.Y;
+            marker.Kind = string.IsNullOrWhiteSpace(dto.Kind) ? "printer" : dto.Kind;
+            marker.Label = dto.Label;
+        }
+
         await _db.SaveChangesAsync();
 
         var rooms = await _db.Rooms.AsNoTracking().Where(r => r.FloorId == id).ToListAsync();
         var desks = await _db.Desks.AsNoTracking().Where(d => d.FloorId == id).ToListAsync();
         var meetingRooms = await _db.MeetingRooms.AsNoTracking().Where(m => m.FloorId == id).ToListAsync();
+        var savedMarkers = await _db.Markers.AsNoTracking().Where(m => m.FloorId == id).ToListAsync();
         var deskIds = desks.Select(d => d.Id).ToList();
         var assignments = await _db.Assignments.AsNoTracking()
             .Where(a => deskIds.Contains(a.DeskId))
@@ -214,7 +244,8 @@ public class FloorsController : ControllerBase
             Rooms = rooms.Select(MapController.ToRoomDto).ToList(),
             Desks = desks.Select(d => MapController.ToDeskDto(d,
                 assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList(),
-            MeetingRooms = meetingRooms.Select(MapController.ToMeetingRoomDto).ToList()
+            MeetingRooms = meetingRooms.Select(MapController.ToMeetingRoomDto).ToList(),
+            Markers = savedMarkers.Select(MapController.ToMarkerDto).ToList()
         });
     }
 

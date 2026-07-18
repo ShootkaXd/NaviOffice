@@ -15,6 +15,9 @@ public record BookingResult(BookingResultKind Kind, string? Message = null);
 /// <summary>Организатор брони (из JWT текущего пользователя).</summary>
 public record BookingOrganizer(string Login, string DisplayName, string? Email);
 
+/// <summary>Приглашённый участник (из справочника сотрудников).</summary>
+public record BookingAttendee(string Login, string DisplayName, string? Email);
+
 public interface IBookingService
 {
     /// <summary>Брони переговорной за день (локальные сутки date).</summary>
@@ -23,5 +26,5 @@ public interface IBookingService
     /// <summary>Текущий статус для набора переговорных (кэшируется вызывающей стороной).</summary>
     Task<List<RoomStatusDto>> GetStatusAsync(IReadOnlyList<MeetingRoom> rooms);
 
-    Task<BookingResult> CreateBookingAsync(MeetingRoom room, BookingOrganizer organizer, DateTime start, DateTime end, string subject);
+    Task<BookingResult> CreateBookingAsync(MeetingRoom room, BookingOrganizer organizer, DateTime start, DateTime end, string subject, IReadOnlyList<BookingAttendee> attendees);
 }

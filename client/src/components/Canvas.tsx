@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { useStore, refreshStatuses } from '../store';
 import { useAuth } from '../auth';
-import { Desk, MapElement, MeetingRoom, Room, RoomStatus } from '../types';
+import { Desk, MapElement, Marker, MeetingRoom, Point, Room, RoomStatus } from '../types';
 import { uid, snap, lastName, initials, DESK_RADIUS, DESK_FREE_COLOR, DESK_OCCUPIED_COLOR, ROOM_COLORS, MEETING_COLOR } from '../utils';
 import { fetchFloorBackground } from '../api';
 import { usePhoto } from './Avatar';
@@ -20,11 +20,40 @@ const MEETING_CARD_W = 288;
 const MEETING_CARD_H = 330;
 
 interface DragState {
-  type: 'move' | 'resize';
+  type: 'move' | 'resize' | 'vertex';
   startX: number;
   startY: number;
   origEl: MapElement;
   corner?: 'nw' | 'ne' | 'sw' | 'se';
+  vertexIndex?: number;
+}
+
+/** Ограничивающий прямоугольник полигона. */
+function bboxOf(points: Point[]) {
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+}
+
+/** Центроид полигона (для подписи). */
+function centroidOf(points: Point[]) {
+  const n = points.length;
+  return {
+    x: points.reduce((s, p) => s + p.x, 0) / n,
+    y: points.reduce((s, p) => s + p.y, 0) / n,
+  };
+}
+
+/** Прямоугольник → 4 вершины (для конвертации в полигон). */
+function rectToPoints(room: Room): Point[] {
+  return [
+    { x: room.x, y: room.y },
+    { x: room.x + room.width, y: room.y },
+    { x: room.x + room.width, y: room.y + room.height },
+    { x: room.x, y: room.y + room.height },
+  ];
 }
 
 interface DrawState {
@@ -403,6 +432,21 @@ export default function Canvas() {
       return;
     }
 
+    if (canEdit && state.tool === 'printer') {
+      if (!state.currentFloorId) return;
+      const marker: Marker = {
+        id: 'tmp-' + uid(),
+        type: 'marker',
+        x: snap(pt.x),
+        y: snap(pt.y),
+        kind: 'printer',
+        label: `Принтер ${currentElements.filter((el) => el.type === 'marker').length + 1}`,
+        floorId: state.currentFloorId,
+      };
+      dispatch({ type: 'ADD_ELEMENT', payload: marker });
+      return;
+    }
+
     // select mode — clicking canvas background deselects
     if ((e.target as SVGElement).id === 'canvas-bg') {
       dispatch({ type: 'SELECT', payload: null });
@@ -433,13 +477,24 @@ export default function Canvas() {
 
       if (drag.type === 'move') {
         const orig = drag.origEl;
+        const nx = snap(orig.x + dx);
+        const ny = snap(orig.y + dy);
+        const payload: MapElement = { ...orig, x: nx, y: ny } as MapElement;
+        // Полигональная комната перемещается вместе с вершинами.
+        if (payload.type === 'room' && orig.type === 'room' && orig.points) {
+          payload.points = orig.points.map((p) => ({ x: p.x + (nx - orig.x), y: p.y + (ny - orig.y) }));
+        }
+        dispatch({ type: 'UPDATE_ELEMENT', payload });
+      } else if (drag.type === 'vertex' && drag.origEl.type === 'room') {
+        const orig = drag.origEl as Room;
+        if (!orig.points || drag.vertexIndex === undefined) return;
+        const points = orig.points.map((p, i) =>
+          i === drag.vertexIndex ? { x: snap(pt.x), y: snap(pt.y) } : p
+        );
+        const bb = bboxOf(points);
         dispatch({
           type: 'UPDATE_ELEMENT',
-          payload: {
-            ...orig,
-            x: snap(orig.x + dx),
-            y: snap(orig.y + dy),
-          } as MapElement,
+          payload: { ...orig, points, ...bb } as MapElement,
         });
       } else if (drag.type === 'resize' && (drag.origEl.type === 'room' || drag.origEl.type === 'meeting')) {
         const orig = drag.origEl as Room | MeetingRoom;
@@ -511,6 +566,7 @@ export default function Canvas() {
             color: ROOM_COLORS[Math.floor(Math.random() * ROOM_COLORS.length)],
             capacity: 4,
             floorId: state.currentFloorId,
+            points: null,
           };
           dispatch({ type: 'ADD_ELEMENT', payload: room });
         }
@@ -525,12 +581,15 @@ export default function Canvas() {
   }
 
   function onElementMouseDown(e: React.MouseEvent, el: MapElement) {
+    // В режимах рисования событие должно дойти до канваса —
+    // иначе нельзя поставить стол/нарисовать комнату поверх существующей.
+    if (canEdit && state.tool !== 'select') return;
     e.stopPropagation();
     if (el.type === 'room') {
       setCard(null);
       setMeetingCard(null);
     }
-    if (!canEdit || state.tool !== 'select') return;
+    if (!canEdit) return;
     dispatch({ type: 'SELECT', payload: el.id });
     const pt = getSVGPoint(e.clientX, e.clientY);
     movedRef.current = false;
@@ -579,6 +638,40 @@ export default function Canvas() {
     setDrag({ type: 'resize', startX: pt.x, startY: pt.y, origEl: el, corner });
   }
 
+  /** Начать перетаскивание существующей вершины полигона. */
+  function onVertexMouseDown(e: React.MouseEvent, room: Room, index: number) {
+    e.stopPropagation();
+    const pt = getSVGPoint(e.clientX, e.clientY);
+    setDrag({ type: 'vertex', startX: pt.x, startY: pt.y, origEl: room, vertexIndex: index });
+  }
+
+  /** Удалить вершину двойным кликом (минимум 3 остаются). */
+  function onVertexDoubleClick(e: React.MouseEvent, room: Room, index: number) {
+    e.stopPropagation();
+    if (!room.points || room.points.length <= 3) return;
+    const points = room.points.filter((_, i) => i !== index);
+    const bb = bboxOf(points);
+    dispatch({ type: 'UPDATE_ELEMENT', payload: { ...room, points, ...bb } as MapElement });
+  }
+
+  /**
+   * Вставить новую вершину на середине ребра и сразу начать её тянуть.
+   * Для прямоугольной комнаты сначала конвертируем её в полигон из 4 углов.
+   */
+  function onMidpointMouseDown(e: React.MouseEvent, room: Room, edgeIndex: number) {
+    e.stopPropagation();
+    const basePoints = room.points ?? rectToPoints(room);
+    const a = basePoints[edgeIndex];
+    const b = basePoints[(edgeIndex + 1) % basePoints.length];
+    const mid = { x: snap((a.x + b.x) / 2), y: snap((a.y + b.y) / 2) };
+    const points = [...basePoints.slice(0, edgeIndex + 1), mid, ...basePoints.slice(edgeIndex + 1)];
+    const bb = bboxOf(points);
+    const updated = { ...room, points, ...bb } as Room;
+    dispatch({ type: 'UPDATE_ELEMENT', payload: updated });
+    const pt = getSVGPoint(e.clientX, e.clientY);
+    setDrag({ type: 'vertex', startX: pt.x, startY: pt.y, origEl: updated, vertexIndex: edgeIndex + 1 });
+  }
+
   function onWheel(e: React.WheelEvent<SVGSVGElement>) {
     e.preventDefault();
     setCard(null);
@@ -597,7 +690,7 @@ export default function Canvas() {
 
   const cursorStyle =
     canEdit && (state.tool === 'room' || state.tool === 'meeting') ? 'crosshair' :
-    canEdit && state.tool === 'desk' ? 'cell' :
+    canEdit && (state.tool === 'desk' || state.tool === 'printer') ? 'cell' :
     drag ? 'grabbing' :
     'default';
 
@@ -664,25 +757,42 @@ export default function Canvas() {
         {currentElements.filter((el) => el.type === 'room').map((el) => {
           const room = el as Room;
           const isSelected = state.selectedId === room.id;
+          const isPolygon = !!room.points && room.points.length >= 3;
+          const label = isPolygon ? centroidOf(room.points!) : { x: room.x + room.width / 2, y: room.y + 23 };
+          const editablePoints = room.points ?? rectToPoints(room);
           return (
             <g key={room.id}>
-              <rect
-                x={room.x}
-                y={room.y}
-                width={room.width}
-                height={room.height}
-                fill={room.color}
-                fillOpacity={0.15}
-                stroke={room.color}
-                strokeWidth={isSelected ? 2 : 1.5}
-                strokeOpacity={isSelected ? 1 : 0.7}
-                rx={4}
-                style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'default' }}
-                onMouseDown={(e) => onElementMouseDown(e, room)}
-              />
+              {isPolygon ? (
+                <polygon
+                  points={room.points!.map((p) => `${p.x},${p.y}`).join(' ')}
+                  fill={room.color}
+                  fillOpacity={0.15}
+                  stroke={room.color}
+                  strokeWidth={isSelected ? 2 : 1.5}
+                  strokeOpacity={isSelected ? 1 : 0.7}
+                  strokeLinejoin="round"
+                  style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'default' }}
+                  onMouseDown={(e) => onElementMouseDown(e, room)}
+                />
+              ) : (
+                <rect
+                  x={room.x}
+                  y={room.y}
+                  width={room.width}
+                  height={room.height}
+                  fill={room.color}
+                  fillOpacity={0.15}
+                  stroke={room.color}
+                  strokeWidth={isSelected ? 2 : 1.5}
+                  strokeOpacity={isSelected ? 1 : 0.7}
+                  rx={4}
+                  style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'default' }}
+                  onMouseDown={(e) => onElementMouseDown(e, room)}
+                />
+              )}
               <text
-                x={room.x + room.width / 2}
-                y={room.y + 16}
+                x={label.x}
+                y={label.y - 7}
                 textAnchor="middle"
                 fontSize={11}
                 fill={room.color}
@@ -695,8 +805,8 @@ export default function Canvas() {
               </text>
               {room.capacity > 0 && (
                 <text
-                  x={room.x + room.width / 2}
-                  y={room.y + 30}
+                  x={label.x}
+                  y={label.y + 7}
                   textAnchor="middle"
                   fontSize={9}
                   fill={room.color}
@@ -708,34 +818,77 @@ export default function Canvas() {
                 </text>
               )}
 
-              {/* Resize handles */}
               {canEdit && isSelected && state.tool === 'select' && (
                 <>
-                  {(['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
-                    const hx =
-                      corner === 'nw' || corner === 'sw'
-                        ? room.x - HANDLE_SIZE / 2
-                        : room.x + room.width - HANDLE_SIZE / 2;
-                    const hy =
-                      corner === 'nw' || corner === 'ne'
-                        ? room.y - HANDLE_SIZE / 2
-                        : room.y + room.height - HANDLE_SIZE / 2;
-                    const cur =
-                      corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize';
-                    return (
+                  {/* Угловые resize-хэндлы — только у прямоугольной комнаты */}
+                  {!isPolygon &&
+                    (['nw', 'ne', 'sw', 'se'] as const).map((corner) => {
+                      const hx =
+                        corner === 'nw' || corner === 'sw'
+                          ? room.x - HANDLE_SIZE / 2
+                          : room.x + room.width - HANDLE_SIZE / 2;
+                      const hy =
+                        corner === 'nw' || corner === 'ne'
+                          ? room.y - HANDLE_SIZE / 2
+                          : room.y + room.height - HANDLE_SIZE / 2;
+                      const cur =
+                        corner === 'nw' || corner === 'se' ? 'nwse-resize' : 'nesw-resize';
+                      return (
+                        <rect
+                          key={corner}
+                          x={hx}
+                          y={hy}
+                          width={HANDLE_SIZE}
+                          height={HANDLE_SIZE}
+                          fill="white"
+                          stroke="#6366f1"
+                          strokeWidth={1.5}
+                          rx={1}
+                          style={{ cursor: cur }}
+                          onMouseDown={(e) => onHandleMouseDown(e, room, corner)}
+                        />
+                      );
+                    })}
+
+                  {/* Вершины полигона: drag — двигать, double-click — удалить */}
+                  {isPolygon &&
+                    room.points!.map((p, i) => (
                       <rect
-                        key={corner}
-                        x={hx}
-                        y={hy}
+                        key={`v-${i}`}
+                        x={p.x - HANDLE_SIZE / 2}
+                        y={p.y - HANDLE_SIZE / 2}
                         width={HANDLE_SIZE}
                         height={HANDLE_SIZE}
                         fill="white"
                         stroke="#6366f1"
                         strokeWidth={1.5}
                         rx={1}
-                        style={{ cursor: cur }}
-                        onMouseDown={(e) => onHandleMouseDown(e, room, corner)}
+                        style={{ cursor: 'move' }}
+                        onMouseDown={(e) => onVertexMouseDown(e, room, i)}
+                        onDoubleClick={(e) => onVertexDoubleClick(e, room, i)}
                       />
+                    ))}
+
+                  {/* Середины рёбер: mousedown — вставить вершину и тянуть (создание угловой формы) */}
+                  {editablePoints.map((p, i) => {
+                    const q = editablePoints[(i + 1) % editablePoints.length];
+                    const mx = (p.x + q.x) / 2;
+                    const my = (p.y + q.y) / 2;
+                    return (
+                      <circle
+                        key={`m-${i}`}
+                        cx={mx}
+                        cy={my}
+                        r={4.5}
+                        fill="#eef2ff"
+                        stroke="#6366f1"
+                        strokeWidth={1.5}
+                        strokeDasharray="2 1.5"
+                        style={{ cursor: 'copy' }}
+                        onMouseDown={(e) => onMidpointMouseDown(e, room, i)}
+                      >
+                        <title>Потянуть, чтобы добавить угол</title>
+                      </circle>
                     );
                   })}
                 </>
@@ -805,6 +958,61 @@ export default function Canvas() {
               onMouseDown={(e) => onElementMouseDown(e, desk)}
               onClick={(e) => onDeskClick(e, desk)}
             />
+          );
+        })}
+
+        {/* Markers (принтеры) */}
+        {currentElements.filter((el) => el.type === 'marker').map((el) => {
+          const marker = el as Marker;
+          const isSelected = state.selectedId === marker.id;
+          return (
+            <g
+              key={marker.id}
+              onMouseDown={(e) => onElementMouseDown(e, marker)}
+              style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'default' }}
+            >
+              {isSelected && (
+                <rect
+                  x={marker.x - 15}
+                  y={marker.y - 15}
+                  width={30}
+                  height={30}
+                  rx={7}
+                  fill="none"
+                  stroke="#6366f1"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 2"
+                />
+              )}
+              <rect
+                x={marker.x - 11}
+                y={marker.y - 11}
+                width={22}
+                height={22}
+                rx={5}
+                fill="#475569"
+                fillOpacity={0.9}
+              />
+              {/* Иконка принтера */}
+              <g transform={`translate(${marker.x - 6}, ${marker.y - 6})`} pointerEvents="none">
+                <rect x="2" y="0" width="8" height="3.5" rx="0.5" fill="white" />
+                <rect x="0" y="3.5" width="12" height="5" rx="1" fill="white" />
+                <rect x="2" y="7.5" width="8" height="4.5" rx="0.5" fill="white" stroke="#475569" strokeWidth="0.8" />
+                <circle cx="10" cy="5.2" r="0.8" fill="#475569" />
+              </g>
+              <text
+                x={marker.x}
+                y={marker.y + 22}
+                textAnchor="middle"
+                fontSize={7.5}
+                fill="#475569"
+                fontWeight="600"
+                pointerEvents="none"
+                style={{ userSelect: 'none' }}
+              >
+                {marker.label}
+              </text>
+            </g>
           );
         })}
 
@@ -910,6 +1118,11 @@ export default function Canvas() {
         {canEdit && state.tool === 'meeting' && (
           <div className="bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
             Нарисуйте переговорную, зажав кнопку мыши
+          </div>
+        )}
+        {canEdit && state.tool === 'printer' && (
+          <div className="bg-black/60 text-white text-xs px-3 py-1 rounded-full backdrop-blur-sm">
+            Кликните по карте, чтобы поставить принтер
           </div>
         )}
       </div>

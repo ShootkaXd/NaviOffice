@@ -18,12 +18,14 @@ public class MeetingRoomsController : ControllerBase
     private readonly AppDbContext _db;
     private readonly IBookingService _booking;
     private readonly IMemoryCache _cache;
+    private readonly IEmployeeDirectory _directory;
 
-    public MeetingRoomsController(AppDbContext db, IBookingService booking, IMemoryCache cache)
+    public MeetingRoomsController(AppDbContext db, IBookingService booking, IMemoryCache cache, IEmployeeDirectory directory)
     {
         _db = db;
         _booking = booking;
         _cache = cache;
+        _directory = directory;
     }
 
     [HttpGet("status")]
@@ -77,7 +79,22 @@ public class MeetingRoomsController : ControllerBase
             User.FindFirst("name")?.Value ?? "",
             User.FindFirst("email")?.Value);
 
-        var result = await _booking.CreateBookingAsync(room, organizer, request.Start, request.End, request.Subject);
+        // Участники: резолвим логины через справочник (имя + email для Outlook).
+        var attendees = new List<BookingAttendee>();
+        foreach (var login in request.Attendees.Distinct(StringComparer.OrdinalIgnoreCase).Take(50))
+        {
+            if (string.IsNullOrWhiteSpace(login))
+            {
+                continue;
+            }
+            var employee = await _directory.GetByLoginAsync(login.Trim());
+            if (employee != null)
+            {
+                attendees.Add(new BookingAttendee(employee.Login, employee.DisplayName, employee.Email));
+            }
+        }
+
+        var result = await _booking.CreateBookingAsync(room, organizer, request.Start, request.End, request.Subject, attendees);
         _cache.Remove(StatusCacheKey);
 
         return result.Kind switch

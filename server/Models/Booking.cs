@@ -10,6 +10,8 @@ public class Booking
     public string Subject { get; set; } = "";
     public string OrganizerLogin { get; set; } = "";
     public string OrganizerName { get; set; } = "";
+    /// <summary>JSON-массив имён участников; null — без участников.</summary>
+    public string? AttendeesJson { get; set; }
 
     public MeetingRoom? MeetingRoom { get; set; }
 }

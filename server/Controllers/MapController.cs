@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,7 @@ public class MapController : ControllerBase
         var rooms = await _db.Rooms.AsNoTracking().ToListAsync();
         var desks = await _db.Desks.AsNoTracking().ToListAsync();
         var meetingRooms = await _db.MeetingRooms.AsNoTracking().ToListAsync();
+        var markers = await _db.Markers.AsNoTracking().ToListAsync();
         var assignments = await _db.Assignments.AsNoTracking().ToListAsync();
 
         var assignmentDtos = new Dictionary<Guid, DeskAssignmentDto>();
@@ -51,7 +53,8 @@ public class MapController : ControllerBase
             Rooms = rooms.Select(ToRoomDto).ToList(),
             Desks = desks.Select(d => ToDeskDto(d,
                 assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList(),
-            MeetingRooms = meetingRooms.Select(ToMeetingRoomDto).ToList()
+            MeetingRooms = meetingRooms.Select(ToMeetingRoomDto).ToList(),
+            Markers = markers.Select(ToMarkerDto).ToList()
         });
     }
 
@@ -90,8 +93,46 @@ public class MapController : ControllerBase
         Height = room.Height,
         Name = room.Name,
         Color = room.Color,
-        Capacity = room.Capacity
+        Capacity = room.Capacity,
+        Points = ParsePoints(room.PointsJson)
     };
+
+    internal static MarkerDto ToMarkerDto(Marker marker) => new()
+    {
+        Id = marker.Id,
+        FloorId = marker.FloorId,
+        X = marker.X,
+        Y = marker.Y,
+        Kind = marker.Kind,
+        Label = marker.Label
+    };
+
+    internal static List<PointDto>? ParsePoints(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+        {
+            return null;
+        }
+        try
+        {
+            var points = JsonSerializer.Deserialize<List<PointDto>>(json,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return points is { Count: >= 3 } ? points : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    internal static string? SerializePoints(List<PointDto>? points)
+    {
+        if (points is not { Count: >= 3 })
+        {
+            return null;
+        }
+        return JsonSerializer.Serialize(points, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+    }
 
     internal static DeskDto ToDeskDto(Desk desk, DeskAssignmentDto? assignment) => new()
     {

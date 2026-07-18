@@ -100,10 +100,7 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
-    if (!usePostgres)
-    {
-        SchemaUpgrade.Apply(db); // доводит существующую v1-SQLite-базу до v2-схемы
-    }
+    SchemaUpgrade.Apply(db, usePostgres); // доводит существующую базу до актуальной схемы
     SeedData.EnsureSeeded(db);
 }
 

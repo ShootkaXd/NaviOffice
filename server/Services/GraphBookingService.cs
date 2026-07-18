@@ -80,7 +80,7 @@ public class GraphBookingService : IBookingService
         return result;
     }
 
-    public async Task<BookingResult> CreateBookingAsync(MeetingRoom room, BookingOrganizer organizer, DateTime start, DateTime end, string subject)
+    public async Task<BookingResult> CreateBookingAsync(MeetingRoom room, BookingOrganizer organizer, DateTime start, DateTime end, string subject, IReadOnlyList<BookingAttendee> attendees)
     {
         if (end <= start)
         {
@@ -109,16 +109,30 @@ public class GraphBookingService : IBookingService
             }
 
             // Событие в календаре сотрудника; room mailbox приглашается ресурсом и подтверждает сам.
+            // Приглашённые сотрудники — required attendees, получают приглашение в Outlook.
+            var attendeeList = new List<object>
+            {
+                new { emailAddress = new { address = room.Email, name = room.Name }, type = "resource" }
+            };
+            foreach (var attendee in attendees)
+            {
+                if (!string.IsNullOrWhiteSpace(attendee.Email))
+                {
+                    attendeeList.Add(new
+                    {
+                        emailAddress = new { address = attendee.Email, name = attendee.DisplayName },
+                        type = "required"
+                    });
+                }
+            }
+
             var payload = new
             {
                 subject = string.IsNullOrWhiteSpace(subject) ? "Встреча" : subject.Trim(),
                 start = new { dateTime = start.ToString("yyyy-MM-ddTHH:mm:ss"), timeZone = _timeZone },
                 end = new { dateTime = end.ToString("yyyy-MM-ddTHH:mm:ss"), timeZone = _timeZone },
                 location = new { displayName = room.Name, locationEmailAddress = room.Email },
-                attendees = new object[]
-                {
-                    new { emailAddress = new { address = room.Email, name = room.Name }, type = "resource" }
-                }
+                attendees = attendeeList
             };
 
             var response = await SendAsync(HttpMethod.Post,

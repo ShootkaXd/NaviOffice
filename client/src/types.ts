@@ -1,4 +1,9 @@
-export type ToolType = 'select' | 'room' | 'desk' | 'meeting';
+export type ToolType = 'select' | 'room' | 'desk' | 'meeting' | 'printer';
+
+export interface Point {
+  x: number;
+  y: number;
+}
 
 export type Role = 'Admin' | 'Secretary' | 'User';
 
@@ -38,6 +43,8 @@ export interface Room {
   color: string;
   capacity: number;
   floorId: string;
+  /** Вершины полигона (угловая комната); null — прямоугольник. */
+  points: Point[] | null;
 }
 
 export interface Desk {
@@ -65,7 +72,17 @@ export interface MeetingRoom {
   floorId: string;
 }
 
-export type MapElement = Room | Desk | MeetingRoom;
+export interface Marker {
+  id: string;
+  type: 'marker';
+  x: number;
+  y: number;
+  kind: string; // пока только 'printer'
+  label: string;
+  floorId: string;
+}
+
+export type MapElement = Room | Desk | MeetingRoom | Marker;
 
 export interface Floor {
   id: string;
@@ -86,6 +103,7 @@ export interface BookingItem {
   end: string;
   subject: string;
   organizer: string;
+  attendees: string[];
 }
 
 export interface AppState {

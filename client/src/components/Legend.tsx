@@ -25,6 +25,10 @@ export default function Legend() {
         Переговорная
       </div>
       <div className="flex items-center gap-2">
+        <span className="w-3 h-3 rounded flex-shrink-0" style={{ background: '#475569' }} />
+        Принтер
+      </div>
+      <div className="flex items-center gap-2">
         <span className="w-3 h-3 rounded-full border-2 border-dashed border-accent flex-shrink-0" />
         Выбранное место
       </div>

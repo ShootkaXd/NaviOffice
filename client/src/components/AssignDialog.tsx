@@ -37,7 +37,7 @@ export default function AssignDialog({ desk, onClose }: AssignDialogProps) {
   }, [onClose]);
 
   function deskName(deskId: string) {
-    const d = state.elements.find((el) => el.type === 'desk' && el.id === deskId);
+    const d = state.elements.find((el): el is Desk => el.type === 'desk' && el.id === deskId);
     return d ? d.name : deskId;
   }
 

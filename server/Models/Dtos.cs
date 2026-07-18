@@ -46,6 +46,12 @@ public class FloorDto
     public bool HasBackground { get; set; }
 }
 
+public class PointDto
+{
+    public double X { get; set; }
+    public double Y { get; set; }
+}
+
 public class RoomDto
 {
     public Guid Id { get; set; }
@@ -57,6 +63,18 @@ public class RoomDto
     public string Name { get; set; } = "";
     public string Color { get; set; } = "";
     public int Capacity { get; set; }
+    /// <summary>Вершины полигона; null — прямоугольник.</summary>
+    public List<PointDto>? Points { get; set; }
+}
+
+public class MarkerDto
+{
+    public Guid Id { get; set; }
+    public Guid FloorId { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public string Kind { get; set; } = "printer";
+    public string Label { get; set; } = "";
 }
 
 public class DeskAssignmentDto
@@ -98,6 +116,7 @@ public class MapResponse
     public List<RoomDto> Rooms { get; set; } = new();
     public List<DeskDto> Desks { get; set; } = new();
     public List<MeetingRoomDto> MeetingRooms { get; set; } = new();
+    public List<MarkerDto> Markers { get; set; } = new();
 }
 
 // ---- Floors ----
@@ -123,6 +142,16 @@ public class RoomElementDto
     public string Name { get; set; } = "";
     public string Color { get; set; } = "#DBEAFE";
     public int Capacity { get; set; }
+    public List<PointDto>? Points { get; set; }
+}
+
+public class MarkerElementDto
+{
+    public Guid? Id { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public string Kind { get; set; } = "printer";
+    public string Label { get; set; } = "";
 }
 
 public class DeskElementDto
@@ -152,6 +181,7 @@ public class FloorElementsRequest
     public List<RoomElementDto> Rooms { get; set; } = new();
     public List<DeskElementDto> Desks { get; set; } = new();
     public List<MeetingRoomElementDto> MeetingRooms { get; set; } = new();
+    public List<MarkerElementDto> Markers { get; set; } = new();
 }
 
 public class FloorElementsResponse
@@ -159,6 +189,7 @@ public class FloorElementsResponse
     public List<RoomDto> Rooms { get; set; } = new();
     public List<DeskDto> Desks { get; set; } = new();
     public List<MeetingRoomDto> MeetingRooms { get; set; } = new();
+    public List<MarkerDto> Markers { get; set; } = new();
 }
 
 // ---- Booking ----
@@ -177,6 +208,7 @@ public class BookingItemDto
     public DateTime End { get; set; }
     public string Subject { get; set; } = "";
     public string Organizer { get; set; } = "";
+    public List<string> Attendees { get; set; } = new();
 }
 
 public class ScheduleResponse
@@ -189,6 +221,8 @@ public class CreateBookingRequest
     public DateTime Start { get; set; }
     public DateTime End { get; set; }
     public string Subject { get; set; } = "";
+    /// <summary>Логины приглашённых сотрудников.</summary>
+    public List<string> Attendees { get; set; } = new();
 }
 
 // ---- Desks ----

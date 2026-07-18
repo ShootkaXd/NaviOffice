@@ -1,8 +1,53 @@
 import { useRef, useState } from 'react';
 import { useStore, refreshMap } from '../store';
-import { Room, Desk, MapElement, MeetingRoom } from '../types';
+import { Room, Desk, MapElement, Marker, MeetingRoom } from '../types';
 import { ROOM_COLORS, showToast } from '../utils';
 import { ApiError, deleteFloorBackground, uploadFloorBackground } from '../api';
+
+/** Палитра + произвольный цвет (input type=color). */
+function ColorField({ value, onChange }: { value: string; onChange: (color: string) => void }) {
+  return (
+    <label className="block mb-3">
+      <span className="text-white/50 text-xs block mb-2">Цвет</span>
+      <div className="flex flex-wrap gap-1.5 items-center">
+        {ROOM_COLORS.map((c) => (
+          <button
+            key={c}
+            onClick={() => onChange(c)}
+            style={{ background: c }}
+            className={`w-6 h-6 rounded-full transition-all ${value === c ? 'ring-2 ring-white ring-offset-1 ring-offset-sidebar scale-110' : 'hover:scale-110'}`}
+          />
+        ))}
+        {/* Произвольный цвет */}
+        <span
+          className={`relative w-6 h-6 rounded-full overflow-hidden border border-white/30 cursor-pointer transition-all hover:scale-110 ${!ROOM_COLORS.includes(value) ? 'ring-2 ring-white ring-offset-1 ring-offset-sidebar scale-110' : ''}`}
+          style={{ background: !ROOM_COLORS.includes(value) ? value : 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' }}
+          title="Свой цвет"
+        >
+          <input
+            type="color"
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          />
+        </span>
+      </div>
+      <div className="flex items-center gap-1.5 mt-2">
+        <span className="w-4 h-4 rounded flex-shrink-0" style={{ background: value }} />
+        <input
+          type="text"
+          key={value}
+          defaultValue={value}
+          onChange={(e) => {
+            const v = e.target.value.trim();
+            if (/^#[0-9a-fA-F]{6}$/.test(v)) onChange(v);
+          }}
+          className="w-20 bg-sidebar-light border border-white/10 rounded px-1.5 py-0.5 text-white/70 text-[11px] font-mono focus:outline-none focus:border-accent"
+        />
+      </div>
+    </label>
+  );
+}
 
 /** Загрузка/удаление плана этажа (подложки). Только для Admin — панель видна только ему. */
 function FloorBackgroundSection() {
@@ -117,17 +162,26 @@ export default function PropertiesPanel() {
 
       <div className="mb-2">
         <span className="text-white/40 text-[10px] uppercase tracking-widest">
-          {selected.type === 'room' ? 'Комната' : selected.type === 'meeting' ? 'Переговорная' : 'Стол'}
+          {selected.type === 'room' ? 'Комната'
+            : selected.type === 'meeting' ? 'Переговорная'
+            : selected.type === 'marker' ? 'Принтер'
+            : 'Стол'}
         </span>
       </div>
 
-      {/* Name */}
+      {/* Name / Label */}
       <label className="block mb-3">
-        <span className="text-white/50 text-xs block mb-1">Название</span>
+        <span className="text-white/50 text-xs block mb-1">
+          {selected.type === 'marker' ? 'Подпись' : 'Название'}
+        </span>
         <input
           type="text"
-          value={selected.name}
-          onChange={(e) => update({ name: e.target.value })}
+          value={selected.type === 'marker' ? (selected as Marker).label : selected.name}
+          onChange={(e) =>
+            selected.type === 'marker'
+              ? update({ label: e.target.value } as Partial<MapElement>)
+              : update({ name: e.target.value } as Partial<MapElement>)
+          }
           className="w-full bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:border-accent"
         />
       </label>
@@ -208,19 +262,22 @@ function RoomProps({ room, update }: { room: Room; update: (p: Partial<Room>) =>
         />
       </label>
 
-      <label className="block mb-3">
-        <span className="text-white/50 text-xs block mb-2">Цвет</span>
-        <div className="flex flex-wrap gap-1.5">
-          {ROOM_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => update({ color: c })}
-              style={{ background: c }}
-              className={`w-6 h-6 rounded-full transition-all ${room.color === c ? 'ring-2 ring-white ring-offset-1 ring-offset-sidebar scale-110' : 'hover:scale-110'}`}
-            />
-          ))}
+      <ColorField value={room.color} onChange={(color) => update({ color })} />
+
+      {room.points && (
+        <div className="mb-3">
+          <span className="text-white/50 text-xs block mb-1">Форма: полигон ({room.points.length} вершин)</span>
+          <button
+            onClick={() => update({ points: null })}
+            className="w-full py-1 text-xs text-white/60 border border-white/10 rounded-md hover:bg-white/5 transition-colors"
+          >
+            Сделать прямоугольной
+          </button>
+          <p className="text-white/20 text-[10px] mt-1">
+            Тяните круглые точки на рёбрах, чтобы добавить углы; двойной клик по вершине удаляет её.
+          </p>
         </div>
-      </label>
+      )}
     </>
   );
 }
@@ -274,19 +331,7 @@ function MeetingProps({ room, update }: { room: MeetingRoom; update: (p: Partial
         />
       </label>
 
-      <label className="block mb-3">
-        <span className="text-white/50 text-xs block mb-2">Цвет</span>
-        <div className="flex flex-wrap gap-1.5">
-          {ROOM_COLORS.map((c) => (
-            <button
-              key={c}
-              onClick={() => update({ color: c })}
-              style={{ background: c }}
-              className={`w-6 h-6 rounded-full transition-all ${room.color === c ? 'ring-2 ring-white ring-offset-1 ring-offset-sidebar scale-110' : 'hover:scale-110'}`}
-            />
-          ))}
-        </div>
-      </label>
+      <ColorField value={room.color} onChange={(color) => update({ color })} />
     </>
   );
 }

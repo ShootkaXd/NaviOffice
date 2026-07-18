@@ -15,6 +15,7 @@ public class AppDbContext : DbContext
     public DbSet<Assignment> Assignments => Set<Assignment>();
     public DbSet<MeetingRoom> MeetingRooms => Set<MeetingRoom>();
     public DbSet<Booking> Bookings => Set<Booking>();
+    public DbSet<Marker> Markers => Set<Marker>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -72,6 +73,16 @@ public class AppDbContext : DbContext
             e.HasOne(b => b.MeetingRoom)
                 .WithMany(m => m.Bookings)
                 .HasForeignKey(b => b.MeetingRoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Marker>(e =>
+        {
+            e.HasKey(m => m.Id);
+            e.Property(m => m.Kind).IsRequired();
+            e.HasOne(m => m.Floor)
+                .WithMany()
+                .HasForeignKey(m => m.FloorId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
     }

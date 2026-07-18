@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using NaviOffice.Api.Data;
 using NaviOffice.Api.Models;
@@ -32,7 +33,8 @@ public class DemoBookingService : IBookingService
             Start = b.Start,
             End = b.End,
             Subject = b.Subject,
-            Organizer = b.OrganizerName
+            Organizer = b.OrganizerName,
+            Attendees = ParseAttendees(b.AttendeesJson)
         }).ToList();
     }
 
@@ -60,7 +62,7 @@ public class DemoBookingService : IBookingService
         }).ToList();
     }
 
-    public async Task<BookingResult> CreateBookingAsync(MeetingRoom room, BookingOrganizer organizer, DateTime start, DateTime end, string subject)
+    public async Task<BookingResult> CreateBookingAsync(MeetingRoom room, BookingOrganizer organizer, DateTime start, DateTime end, string subject, IReadOnlyList<BookingAttendee> attendees)
     {
         if (end <= start)
         {
@@ -86,10 +88,29 @@ public class DemoBookingService : IBookingService
             End = end,
             Subject = string.IsNullOrWhiteSpace(subject) ? "Встреча" : subject.Trim(),
             OrganizerLogin = organizer.Login,
-            OrganizerName = organizer.DisplayName
+            OrganizerName = organizer.DisplayName,
+            AttendeesJson = attendees.Count > 0
+                ? JsonSerializer.Serialize(attendees.Select(a => a.DisplayName).ToList())
+                : null
         });
         await _db.SaveChangesAsync();
 
         return new BookingResult(BookingResultKind.Created);
+    }
+
+    private static List<string> ParseAttendees(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+        {
+            return new List<string>();
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
+        }
     }
 }

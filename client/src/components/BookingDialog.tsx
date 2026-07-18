@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { MeetingRoom } from '../types';
-import { ApiError, createBooking } from '../api';
+import { useEffect, useRef, useState } from 'react';
+import { Employee, MeetingRoom } from '../types';
+import { ApiError, createBooking, searchEmployees } from '../api';
 import { showToast } from '../utils';
+import Avatar from './Avatar';
 
 interface BookingDialogProps {
   room: MeetingRoom;
@@ -30,6 +31,37 @@ export default function BookingDialog({ room, onClose, onBooked }: BookingDialog
   const [subject, setSubject] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [attendees, setAttendees] = useState<Employee[]>([]);
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<Employee[]>([]);
+  const debounceRef = useRef<number | null>(null);
+
+  // Поиск участников с дебаунсом.
+  useEffect(() => {
+    if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    if (query.trim().length < 2) {
+      setResults([]);
+      return;
+    }
+    debounceRef.current = window.setTimeout(() => {
+      searchEmployees(query.trim())
+        .then((list) => setResults(list.filter((e) => !attendees.some((a) => a.login === e.login)).slice(0, 6)))
+        .catch(() => setResults([]));
+    }, 250);
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current);
+    };
+  }, [query, attendees]);
+
+  function addAttendee(emp: Employee) {
+    setAttendees((prev) => [...prev, emp]);
+    setQuery('');
+    setResults([]);
+  }
+
+  function removeAttendee(login: string) {
+    setAttendees((prev) => prev.filter((a) => a.login !== login));
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -42,7 +74,13 @@ export default function BookingDialog({ room, onClose, onBooked }: BookingDialog
     setBusy(true);
     try {
       // Локальное время без смещения — сервер трактует так же.
-      await createBooking(room.id, `${date}T${start}:00`, `${date}T${end}:00`, subject);
+      await createBooking(
+        room.id,
+        `${date}T${start}:00`,
+        `${date}T${end}:00`,
+        subject,
+        attendees.map((a) => a.login)
+      );
       showToast('Переговорная забронирована');
       onBooked();
       onClose();
@@ -120,6 +158,59 @@ export default function BookingDialog({ room, onClose, onBooked }: BookingDialog
             className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-accent"
           />
         </label>
+
+        {/* Участники */}
+        <div className="mb-3">
+          <span className="text-xs text-gray-500 block mb-1">Участники</span>
+          {attendees.length > 0 && (
+            <div className="flex flex-wrap gap-1 mb-1.5">
+              {attendees.map((a) => (
+                <span
+                  key={a.login}
+                  className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-[11px] rounded-full pl-1 pr-1.5 py-0.5"
+                >
+                  <Avatar login={a.login} name={a.displayName} size={16} />
+                  {a.displayName.split(/\s+/).slice(0, 2).join(' ')}
+                  <button
+                    type="button"
+                    onClick={() => removeAttendee(a.login)}
+                    className="text-indigo-300 hover:text-indigo-600 leading-none"
+                    title="Убрать"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="relative">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Найти сотрудника…"
+              className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-accent"
+            />
+            {results.length > 0 && (
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-40 overflow-y-auto">
+                {results.map((emp) => (
+                  <button
+                    key={emp.login}
+                    type="button"
+                    onClick={() => addAttendee(emp)}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-gray-50"
+                  >
+                    <Avatar login={emp.login} name={emp.displayName} size={22} />
+                    <span className="min-w-0">
+                      <span className="block text-xs text-gray-800 truncate">{emp.displayName}</span>
+                      <span className="block text-[10px] text-gray-400 truncate">{emp.department}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
 
         {error && <div className="text-xs text-red-500 mb-3">{error}</div>}
 

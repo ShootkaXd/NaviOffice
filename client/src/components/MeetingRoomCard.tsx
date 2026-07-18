@@ -100,14 +100,21 @@ export default function MeetingRoomCard({ room, status, x, y, onClose, onBook, r
         ) : (
           <div className="max-h-36 overflow-y-auto space-y-1">
             {items.map((b, i) => (
-              <div key={i} className="flex items-baseline gap-2 text-xs">
-                <span className="text-gray-700 font-medium whitespace-nowrap tabular-nums">
-                  {fmtTime(b.start)}–{fmtTime(b.end)}
-                </span>
-                <span className="text-gray-500 truncate">
-                  {b.subject}
-                  {b.organizer && <span className="text-gray-300"> · {b.organizer}</span>}
-                </span>
+              <div key={i} className="text-xs">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-gray-700 font-medium whitespace-nowrap tabular-nums">
+                    {fmtTime(b.start)}–{fmtTime(b.end)}
+                  </span>
+                  <span className="text-gray-500 truncate">
+                    {b.subject}
+                    {b.organizer && <span className="text-gray-300"> · {b.organizer}</span>}
+                  </span>
+                </div>
+                {b.attendees.length > 0 && (
+                  <div className="text-[10px] text-gray-400 pl-1 truncate" title={b.attendees.join(', ')}>
+                    Участники: {b.attendees.join(', ')}
+                  </div>
+                )}
               </div>
             ))}
           </div>

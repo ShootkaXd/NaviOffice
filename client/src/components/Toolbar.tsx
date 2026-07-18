@@ -51,6 +51,18 @@ const tools: Tool[] = [
       </svg>
     ),
   },
+  {
+    id: 'printer',
+    label: 'Добавить принтер',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M6 9V3h12v6" />
+        <rect x="3" y="9" width="18" height="8" rx="1.5" />
+        <rect x="6" y="14" width="12" height="7" />
+        <circle cx="18" cy="12" r="0.5" fill="currentColor" />
+      </svg>
+    ),
+  },
 ];
 
 export default function Toolbar() {
@@ -78,7 +90,11 @@ export default function Toolbar() {
       <div className="mb-3 text-white/20 text-center">
         <div className="w-6 border-t border-white/10 mx-auto mb-2" />
         <span className="text-[9px] leading-3 block">
-          {state.tool === 'select' ? 'SEL' : state.tool === 'room' ? 'ROOM' : state.tool === 'meeting' ? 'MEET' : 'DESK'}
+          {state.tool === 'select' ? 'SEL'
+            : state.tool === 'room' ? 'ROOM'
+            : state.tool === 'meeting' ? 'MEET'
+            : state.tool === 'printer' ? 'PRNT'
+            : 'DESK'}
         </span>
       </div>
     </aside>

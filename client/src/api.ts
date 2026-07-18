@@ -1,4 +1,4 @@
-import { BookingItem, Desk, DeskAssignment, Employee, Floor, MapElement, MeetingRoom, Room, RoomStatus, User } from './types';
+import { BookingItem, Desk, DeskAssignment, Employee, Floor, MapElement, Marker, MeetingRoom, Point, Room, RoomStatus, User } from './types';
 
 const TOKEN_KEY = 'navioffice_token';
 
@@ -109,6 +109,16 @@ interface RoomDto {
   name: string;
   color: string;
   capacity: number;
+  points: Point[] | null;
+}
+
+interface MarkerDto {
+  id: string;
+  floorId: string;
+  x: number;
+  y: number;
+  kind: string;
+  label: string;
 }
 
 interface DeskDto {
@@ -139,6 +149,7 @@ interface MapDto {
   rooms: RoomDto[];
   desks: DeskDto[];
   meetingRooms: MeetingRoomDto[];
+  markers: MarkerDto[];
 }
 
 export interface MapData {
@@ -148,7 +159,7 @@ export interface MapData {
 
 export async function getMap(): Promise<MapData> {
   const dto = await request<MapDto>('/api/map');
-  const rooms: Room[] = dto.rooms.map((r) => ({ ...r, type: 'room' }));
+  const rooms: Room[] = dto.rooms.map((r) => ({ ...r, points: r.points ?? null, type: 'room' }));
   const desks: Desk[] = dto.desks.map((d) => ({
     ...d,
     rotation: d.rotation ?? 0,
@@ -160,7 +171,8 @@ export async function getMap(): Promise<MapData> {
     email: m.email ?? null,
     type: 'meeting',
   }));
-  return { floors: dto.floors, elements: [...rooms, ...desks, ...meetingRooms] };
+  const markers: Marker[] = (dto.markers ?? []).map((m) => ({ ...m, type: 'marker' }));
+  return { floors: dto.floors, elements: [...rooms, ...desks, ...meetingRooms, ...markers] };
 }
 
 // ---------- Floors ----------
@@ -194,6 +206,7 @@ export function saveFloorElements(floorId: string, elements: MapElement[]): Prom
       name: r.name,
       color: r.color,
       capacity: r.capacity,
+      points: r.points,
     }));
   const desks = elements
     .filter((el): el is Desk => el.type === 'desk')
@@ -217,9 +230,18 @@ export function saveFloorElements(floorId: string, elements: MapElement[]): Prom
       capacity: m.capacity,
       color: m.color,
     }));
+  const markers = elements
+    .filter((el): el is Marker => el.type === 'marker')
+    .map((m) => ({
+      ...(isClientId(m.id) ? {} : { id: m.id }),
+      x: m.x,
+      y: m.y,
+      kind: m.kind,
+      label: m.label,
+    }));
   return request(`/api/floors/${floorId}/elements`, {
     method: 'PUT',
-    body: JSON.stringify({ rooms, desks, meetingRooms }),
+    body: JSON.stringify({ rooms, desks, meetingRooms, markers }),
   });
 }
 
@@ -233,10 +255,16 @@ export function getMeetingRoomSchedule(roomId: string, dateISO: string): Promise
   return request(`/api/meetingrooms/${roomId}/schedule?date=${encodeURIComponent(dateISO)}`);
 }
 
-export function createBooking(roomId: string, start: string, end: string, subject: string): Promise<void> {
+export function createBooking(
+  roomId: string,
+  start: string,
+  end: string,
+  subject: string,
+  attendees: string[] = []
+): Promise<void> {
   return request(`/api/meetingrooms/${roomId}/bookings`, {
     method: 'POST',
-    body: JSON.stringify({ start, end, subject }),
+    body: JSON.stringify({ start, end, subject, attendees }),
   });
 }
 

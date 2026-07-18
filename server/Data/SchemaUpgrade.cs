@@ -4,12 +4,47 @@ using Microsoft.EntityFrameworkCore;
 namespace NaviOffice.Api.Data;
 
 /// <summary>
-/// Доводит существующую v1-базу (созданную EnsureCreated до появления переговорных)
+/// Доводит существующую базу (созданную EnsureCreated в прежних версиях)
 /// до актуальной схемы. На свежей базе EnsureCreated создаёт всё сам и эти запросы no-op.
+/// Поддерживает SQLite и PostgreSQL.
 /// </summary>
 public static class SchemaUpgrade
 {
-    public static void Apply(AppDbContext db)
+    public static void Apply(AppDbContext db, bool postgres)
+    {
+        if (postgres)
+        {
+            ApplyPostgres(db);
+        }
+        else
+        {
+            ApplySqlite(db);
+        }
+    }
+
+    // ---- PostgreSQL: есть IF NOT EXISTS для всего ----
+
+    private static void ApplyPostgres(AppDbContext db)
+    {
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Markers" (
+                "Id" uuid NOT NULL CONSTRAINT "PK_Markers" PRIMARY KEY,
+                "FloorId" uuid NOT NULL,
+                "X" double precision NOT NULL,
+                "Y" double precision NOT NULL,
+                "Kind" text NOT NULL,
+                "Label" text NOT NULL,
+                CONSTRAINT "FK_Markers_Floors_FloorId" FOREIGN KEY ("FloorId") REFERENCES "Floors" ("Id") ON DELETE CASCADE
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""CREATE INDEX IF NOT EXISTS "IX_Markers_FloorId" ON "Markers" ("FloorId");""");
+        db.Database.ExecuteSqlRaw("""ALTER TABLE "Rooms" ADD COLUMN IF NOT EXISTS "PointsJson" text NULL;""");
+        db.Database.ExecuteSqlRaw("""ALTER TABLE "Bookings" ADD COLUMN IF NOT EXISTS "AttendeesJson" text NULL;""");
+    }
+
+    // ---- SQLite: ADD COLUMN IF NOT EXISTS нет — ловим "duplicate column" ----
+
+    private static void ApplySqlite(AppDbContext db)
     {
         db.Database.ExecuteSqlRaw("""
             CREATE TABLE IF NOT EXISTS "MeetingRooms" (
@@ -38,15 +73,32 @@ public static class SchemaUpgrade
                 "Subject" TEXT NOT NULL,
                 "OrganizerLogin" TEXT NOT NULL,
                 "OrganizerName" TEXT NOT NULL,
+                "AttendeesJson" TEXT NULL,
                 CONSTRAINT "FK_Bookings_MeetingRooms_MeetingRoomId" FOREIGN KEY ("MeetingRoomId") REFERENCES "MeetingRooms" ("Id") ON DELETE CASCADE
             );
             """);
         db.Database.ExecuteSqlRaw("""
             CREATE INDEX IF NOT EXISTS "IX_Bookings_MeetingRoomId_Start" ON "Bookings" ("MeetingRoomId", "Start");
             """);
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Markers" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Markers" PRIMARY KEY,
+                "FloorId" TEXT NOT NULL,
+                "X" REAL NOT NULL,
+                "Y" REAL NOT NULL,
+                "Kind" TEXT NOT NULL,
+                "Label" TEXT NOT NULL,
+                CONSTRAINT "FK_Markers_Floors_FloorId" FOREIGN KEY ("FloorId") REFERENCES "Floors" ("Id") ON DELETE CASCADE
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""
+            CREATE INDEX IF NOT EXISTS "IX_Markers_FloorId" ON "Markers" ("FloorId");
+            """);
 
         AddColumnIfMissing(db, "Floors", "BackgroundImage", "BLOB NULL");
         AddColumnIfMissing(db, "Floors", "BackgroundContentType", "TEXT NULL");
+        AddColumnIfMissing(db, "Rooms", "PointsJson", "TEXT NULL");
+        AddColumnIfMissing(db, "Bookings", "AttendeesJson", "TEXT NULL");
     }
 
     private static void AddColumnIfMissing(AppDbContext db, string table, string column, string definition)
