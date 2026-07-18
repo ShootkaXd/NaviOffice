@@ -80,19 +80,26 @@ public class MeetingRoomsController : ControllerBase
             User.FindFirst("email")?.Value);
 
         // Участники: резолвим логины через справочник (имя + email для Outlook).
+        // Обязательные имеют приоритет: дубликат в двух списках остаётся обязательным.
         var attendees = new List<BookingAttendee>();
-        foreach (var login in request.Attendees.Distinct(StringComparer.OrdinalIgnoreCase).Take(50))
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        async Task ResolveAsync(IEnumerable<string> logins, bool required)
         {
-            if (string.IsNullOrWhiteSpace(login))
+            foreach (var login in logins.Take(50))
             {
-                continue;
-            }
-            var employee = await _directory.GetByLoginAsync(login.Trim());
-            if (employee != null)
-            {
-                attendees.Add(new BookingAttendee(employee.Login, employee.DisplayName, employee.Email));
+                if (string.IsNullOrWhiteSpace(login) || !seen.Add(login.Trim()))
+                {
+                    continue;
+                }
+                var employee = await _directory.GetByLoginAsync(login.Trim());
+                if (employee != null)
+                {
+                    attendees.Add(new BookingAttendee(employee.Login, employee.DisplayName, employee.Email, required));
+                }
             }
         }
+        await ResolveAsync(request.Attendees, required: true);
+        await ResolveAsync(request.OptionalAttendees, required: false);
 
         var result = await _booking.CreateBookingAsync(room, organizer, request.Start, request.End, request.Subject, attendees);
         _cache.Remove(StatusCacheKey);

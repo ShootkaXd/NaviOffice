@@ -260,11 +260,12 @@ export function createBooking(
   start: string,
   end: string,
   subject: string,
-  attendees: string[] = []
+  attendees: string[] = [],
+  optionalAttendees: string[] = []
 ): Promise<void> {
   return request(`/api/meetingrooms/${roomId}/bookings`, {
     method: 'POST',
-    body: JSON.stringify({ start, end, subject, attendees }),
+    body: JSON.stringify({ start, end, subject, attendees, optionalAttendees }),
   });
 }
 

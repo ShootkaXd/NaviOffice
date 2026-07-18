@@ -33,7 +33,7 @@ export default function BookingDialog({ room, onClose, onBooked, initial }: Book
   const [subject, setSubject] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [attendees, setAttendees] = useState<Employee[]>([]);
+  const [attendees, setAttendees] = useState<{ emp: Employee; required: boolean }[]>([]);
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Employee[]>([]);
   const debounceRef = useRef<number | null>(null);
@@ -47,7 +47,7 @@ export default function BookingDialog({ room, onClose, onBooked, initial }: Book
     }
     debounceRef.current = window.setTimeout(() => {
       searchEmployees(query.trim())
-        .then((list) => setResults(list.filter((e) => !attendees.some((a) => a.login === e.login)).slice(0, 6)))
+        .then((list) => setResults(list.filter((e) => !attendees.some((a) => a.emp.login === e.login)).slice(0, 6)))
         .catch(() => setResults([]));
     }, 250);
     return () => {
@@ -55,14 +55,19 @@ export default function BookingDialog({ room, onClose, onBooked, initial }: Book
     };
   }, [query, attendees]);
 
-  function addAttendee(emp: Employee) {
-    setAttendees((prev) => [...prev, emp]);
+  function addAttendee(emp: Employee, required: boolean) {
+    setAttendees((prev) => [...prev, { emp, required }]);
     setQuery('');
     setResults([]);
   }
 
   function removeAttendee(login: string) {
-    setAttendees((prev) => prev.filter((a) => a.login !== login));
+    setAttendees((prev) => prev.filter((a) => a.emp.login !== login));
+  }
+
+  /** Клик по чипу — перенести участника в другую группу. */
+  function toggleRequired(login: string) {
+    setAttendees((prev) => prev.map((a) => (a.emp.login === login ? { ...a, required: !a.required } : a)));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -81,7 +86,8 @@ export default function BookingDialog({ room, onClose, onBooked, initial }: Book
         `${date}T${start}:00`,
         `${date}T${end}:00`,
         subject,
-        attendees.map((a) => a.login)
+        attendees.filter((a) => a.required).map((a) => a.emp.login),
+        attendees.filter((a) => !a.required).map((a) => a.emp.login)
       );
       showToast('Переговорная забронирована');
       onBooked();
@@ -174,30 +180,74 @@ export default function BookingDialog({ room, onClose, onBooked, initial }: Book
           />
         </label>
 
-        {/* Участники */}
+        {/* Участники: обязательные и необязательные */}
         <div className="mb-3">
           <span className="text-xs text-gray-500 block mb-1">Участники</span>
-          {attendees.length > 0 && (
-            <div className="flex flex-wrap gap-1 mb-1.5">
-              {attendees.map((a) => (
-                <span
-                  key={a.login}
-                  className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-[11px] rounded-full pl-1 pr-1.5 py-0.5"
-                >
-                  <Avatar login={a.login} name={a.displayName} size={16} />
-                  {a.displayName.split(/\s+/).slice(0, 2).join(' ')}
-                  <button
-                    type="button"
-                    onClick={() => removeAttendee(a.login)}
-                    className="text-indigo-300 hover:text-indigo-600 leading-none"
-                    title="Убрать"
+
+          {attendees.some((a) => a.required) && (
+            <div className="mb-1.5">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider block mb-1">Обязательные</span>
+              <div className="flex flex-wrap gap-1">
+                {attendees.filter((a) => a.required).map(({ emp }) => (
+                  <span
+                    key={emp.login}
+                    className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-[11px] rounded-full pl-1 pr-1.5 py-0.5"
                   >
-                    ×
-                  </button>
-                </span>
-              ))}
+                    <Avatar login={emp.login} name={emp.displayName} size={16} />
+                    <button
+                      type="button"
+                      onClick={() => toggleRequired(emp.login)}
+                      title="Сделать необязательным"
+                      className="hover:underline"
+                    >
+                      {emp.displayName.split(/\s+/).slice(0, 2).join(' ')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeAttendee(emp.login)}
+                      className="text-indigo-300 hover:text-indigo-600 leading-none"
+                      title="Убрать"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
             </div>
           )}
+
+          {attendees.some((a) => !a.required) && (
+            <div className="mb-1.5">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider block mb-1">Необязательные</span>
+              <div className="flex flex-wrap gap-1">
+                {attendees.filter((a) => !a.required).map(({ emp }) => (
+                  <span
+                    key={emp.login}
+                    className="inline-flex items-center gap-1 bg-gray-100 text-gray-600 text-[11px] rounded-full pl-1 pr-1.5 py-0.5 border border-dashed border-gray-300"
+                  >
+                    <Avatar login={emp.login} name={emp.displayName} size={16} />
+                    <button
+                      type="button"
+                      onClick={() => toggleRequired(emp.login)}
+                      title="Сделать обязательным"
+                      className="hover:underline"
+                    >
+                      {emp.displayName.split(/\s+/).slice(0, 2).join(' ')}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeAttendee(emp.login)}
+                      className="text-gray-300 hover:text-gray-600 leading-none"
+                      title="Убрать"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="relative">
             <input
               type="text"
@@ -207,24 +257,37 @@ export default function BookingDialog({ room, onClose, onBooked, initial }: Book
               className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm focus:outline-none focus:border-accent"
             />
             {results.length > 0 && (
-              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-40 overflow-y-auto">
+              <div className="absolute left-0 right-0 top-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-44 overflow-y-auto">
                 {results.map((emp) => (
-                  <button
-                    key={emp.login}
-                    type="button"
-                    onClick={() => addAttendee(emp)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 text-left hover:bg-gray-50"
-                  >
+                  <div key={emp.login} className="flex items-center gap-2 px-2 py-1.5 hover:bg-gray-50">
                     <Avatar login={emp.login} name={emp.displayName} size={22} />
-                    <span className="min-w-0">
+                    <span className="min-w-0 flex-1">
                       <span className="block text-xs text-gray-800 truncate">{emp.displayName}</span>
                       <span className="block text-[10px] text-gray-400 truncate">{emp.department}</span>
                     </span>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => addAttendee(emp, true)}
+                      className="text-[10px] px-2 py-1 bg-accent text-white rounded hover:bg-indigo-500 whitespace-nowrap"
+                    >
+                      Пригласить
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => addAttendee(emp, false)}
+                      title="Участие по желанию"
+                      className="text-[10px] px-2 py-1 border border-gray-200 text-gray-500 rounded hover:bg-gray-100 whitespace-nowrap"
+                    >
+                      Необяз.
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
           </div>
+          {attendees.length > 0 && (
+            <p className="text-[10px] text-gray-300 mt-1">Клик по имени переносит участника в другую группу.</p>
+          )}
         </div>
 
         {error && <div className="text-xs text-red-500 mb-3">{error}</div>}

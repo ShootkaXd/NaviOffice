@@ -104,6 +104,7 @@ export interface BookingItem {
   subject: string;
   organizer: string;
   attendees: string[];
+  optionalAttendees: string[];
 }
 
 export interface AppState {

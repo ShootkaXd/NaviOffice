@@ -121,7 +121,7 @@ public class GraphBookingService : IBookingService
                     attendeeList.Add(new
                     {
                         emailAddress = new { address = attendee.Email, name = attendee.DisplayName },
-                        type = "required"
+                        type = attendee.Required ? "required" : "optional"
                     });
                 }
             }

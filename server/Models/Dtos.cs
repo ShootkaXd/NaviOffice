@@ -208,7 +208,10 @@ public class BookingItemDto
     public DateTime End { get; set; }
     public string Subject { get; set; } = "";
     public string Organizer { get; set; } = "";
+    /// <summary>Имена обязательных участников.</summary>
     public List<string> Attendees { get; set; } = new();
+    /// <summary>Имена необязательных участников.</summary>
+    public List<string> OptionalAttendees { get; set; } = new();
 }
 
 public class ScheduleResponse
@@ -221,8 +224,10 @@ public class CreateBookingRequest
     public DateTime Start { get; set; }
     public DateTime End { get; set; }
     public string Subject { get; set; } = "";
-    /// <summary>Логины приглашённых сотрудников.</summary>
+    /// <summary>Логины обязательных участников.</summary>
     public List<string> Attendees { get; set; } = new();
+    /// <summary>Логины необязательных участников.</summary>
+    public List<string> OptionalAttendees { get; set; } = new();
 }
 
 // ---- Desks ----

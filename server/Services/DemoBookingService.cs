@@ -28,13 +28,18 @@ public class DemoBookingService : IBookingService
             .OrderBy(b => b.Start)
             .ToListAsync();
 
-        return bookings.Select(b => new BookingItemDto
+        return bookings.Select(b =>
         {
-            Start = b.Start,
-            End = b.End,
-            Subject = b.Subject,
-            Organizer = b.OrganizerName,
-            Attendees = ParseAttendees(b.AttendeesJson)
+            var (required, optional) = ParseAttendees(b.AttendeesJson);
+            return new BookingItemDto
+            {
+                Start = b.Start,
+                End = b.End,
+                Subject = b.Subject,
+                Organizer = b.OrganizerName,
+                Attendees = required,
+                OptionalAttendees = optional
+            };
         }).ToList();
     }
 
@@ -90,7 +95,11 @@ public class DemoBookingService : IBookingService
             OrganizerLogin = organizer.Login,
             OrganizerName = organizer.DisplayName,
             AttendeesJson = attendees.Count > 0
-                ? JsonSerializer.Serialize(attendees.Select(a => a.DisplayName).ToList())
+                ? JsonSerializer.Serialize(new AttendeesPayload
+                {
+                    Required = attendees.Where(a => a.Required).Select(a => a.DisplayName).ToList(),
+                    Optional = attendees.Where(a => !a.Required).Select(a => a.DisplayName).ToList()
+                })
                 : null
         });
         await _db.SaveChangesAsync();
@@ -98,19 +107,31 @@ public class DemoBookingService : IBookingService
         return new BookingResult(BookingResultKind.Created);
     }
 
-    private static List<string> ParseAttendees(string? json)
+    private class AttendeesPayload
+    {
+        public List<string> Required { get; set; } = new();
+        public List<string> Optional { get; set; } = new();
+    }
+
+    private static (List<string> Required, List<string> Optional) ParseAttendees(string? json)
     {
         if (string.IsNullOrEmpty(json))
         {
-            return new List<string>();
+            return (new List<string>(), new List<string>());
         }
         try
         {
-            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+            // Старый формат — плоский массив имён (все считаются обязательными).
+            if (json.TrimStart().StartsWith('['))
+            {
+                return (JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>(), new List<string>());
+            }
+            var payload = JsonSerializer.Deserialize<AttendeesPayload>(json);
+            return (payload?.Required ?? new List<string>(), payload?.Optional ?? new List<string>());
         }
         catch (JsonException)
         {
-            return new List<string>();
+            return (new List<string>(), new List<string>());
         }
     }
 }

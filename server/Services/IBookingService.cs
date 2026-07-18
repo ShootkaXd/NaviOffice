@@ -15,8 +15,8 @@ public record BookingResult(BookingResultKind Kind, string? Message = null);
 /// <summary>Организатор брони (из JWT текущего пользователя).</summary>
 public record BookingOrganizer(string Login, string DisplayName, string? Email);
 
-/// <summary>Приглашённый участник (из справочника сотрудников).</summary>
-public record BookingAttendee(string Login, string DisplayName, string? Email);
+/// <summary>Приглашённый участник (из справочника сотрудников). Required=false — необязательный.</summary>
+public record BookingAttendee(string Login, string DisplayName, string? Email, bool Required = true);
 
 public interface IBookingService
 {

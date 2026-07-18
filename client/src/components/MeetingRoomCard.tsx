@@ -36,9 +36,18 @@ function fmtHM(h: number, m: number) {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
-function todayISO() {
-  const d = new Date();
+function toISO(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function todayISO() {
+  return toISO(new Date());
+}
+
+function addDays(iso: string, days: number) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return toISO(d);
 }
 
 /** Минуты от начала таймлайна (08:00). */
@@ -53,6 +62,8 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
   const [items, setItems] = useState<BookingItem[] | null>(null);
   const [quickBusy, setQuickBusy] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [selectedDate, setSelectedDate] = useState(() => todayISO());
+  const isToday = selectedDate === todayISO();
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 30_000);
@@ -61,7 +72,8 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
 
   useEffect(() => {
     let alive = true;
-    getMeetingRoomSchedule(room.id, todayISO())
+    setItems(null);
+    getMeetingRoomSchedule(room.id, selectedDate)
       .then((res) => {
         if (alive) setItems(res.items);
       })
@@ -71,18 +83,36 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
     return () => {
       alive = false;
     };
-  }, [room.id, refreshKey]);
+  }, [room.id, refreshKey, selectedDate]);
 
-  // Текущая и следующая встречи — по расписанию (точнее, чем 60-сек кэш статусов).
+  // Текущая и следующая встречи — только для «сегодня» (иначе точнее кэш статусов).
   const { current, next } = useMemo(() => {
+    if (!isToday) return { current: undefined, next: undefined };
     const list = items ?? [];
     const cur = list.find((b) => new Date(b.start) <= now && now < new Date(b.end));
     const nxt = list.filter((b) => new Date(b.start) > now).sort((a, b) => a.start.localeCompare(b.start))[0];
     return { current: cur, next: nxt };
-  }, [items, now]);
+  }, [items, now, isToday]);
 
-  const isBusy = current !== undefined || (items === null && !!status?.busy);
+  const isBusy = isToday
+    ? current !== undefined || (items === null && !!status?.busy)
+    : !!status?.busy;
   const freeUntil = next ? fmtTime(next.start) : null;
+
+  // Первая встреча выбранного (не сегодняшнего) дня — для блока «В этот день».
+  const firstOfDay = !isToday && items && items.length > 0 ? items[0] : undefined;
+
+  // Лента ближайших 7 дней.
+  const dayStrip = useMemo(
+    () =>
+      Array.from({ length: 7 }, (_, i) => {
+        const iso = addDays(todayISO(), i);
+        const d = new Date(iso + 'T00:00:00');
+        return { iso, weekday: WEEKDAYS[d.getDay()], day: d.getDate() };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [now.getDate()]
+  );
 
   async function quickBook(minutes: number) {
     if (quickBusy) return;
@@ -105,16 +135,15 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
     }
   }
 
-  // Свободные 30-минутные слоты для «+» на таймлайне.
+  // Свободные 30-минутные слоты для «+» на таймлайне выбранного дня.
   const freeSlots = useMemo(() => {
     const list = items ?? [];
     const slots: { h: number; m: number }[] = [];
     for (let h = DAY_START_H; h < DAY_END_H; h++) {
       for (const m of [0, 30]) {
-        const slotStart = new Date(now);
-        slotStart.setHours(h, m, 0, 0);
+        const slotStart = new Date(`${selectedDate}T${fmtHM(h, m)}:00`);
         const slotEnd = new Date(slotStart.getTime() + 30 * 60_000);
-        if (slotEnd <= now) continue; // прошедшие не предлагаем
+        if (isToday && slotEnd <= now) continue; // прошедшие сегодня не предлагаем
         const overlaps = list.some(
           (b) => new Date(b.start) < slotEnd && slotStart < new Date(b.end)
         );
@@ -122,7 +151,7 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
       }
     }
     return slots;
-  }, [items, now]);
+  }, [items, now, selectedDate, isToday]);
 
   const nowOffset = (now.getHours() - DAY_START_H) * 60 + now.getMinutes();
   const timelineH = (DAY_END_H - DAY_START_H) * 60 * PX_PER_MIN;
@@ -189,21 +218,22 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
             {!isBusy && (
               <div className="flex items-center gap-2 mt-3 flex-wrap">
                 <span className="text-sm font-medium mr-1">Забронировать</span>
-                {QUICK_DURATIONS.map((d) => (
-                  <button
-                    key={d}
-                    disabled={quickBusy}
-                    onClick={() => quickBook(d)}
-                    className="px-3 py-1.5 text-xs bg-white/15 hover:bg-white/30 rounded-md transition-colors disabled:opacity-40 whitespace-nowrap"
-                  >
-                    {d < 60 ? `${d} минут` : d === 60 ? '1 час' : '1,5 часа'}
-                  </button>
-                ))}
+                {isToday &&
+                  QUICK_DURATIONS.map((d) => (
+                    <button
+                      key={d}
+                      disabled={quickBusy}
+                      onClick={() => quickBook(d)}
+                      className="px-3 py-1.5 text-xs bg-white/15 hover:bg-white/30 rounded-md transition-colors disabled:opacity-40 whitespace-nowrap"
+                    >
+                      {d < 60 ? `${d} минут` : d === 60 ? '1 час' : '1,5 часа'}
+                    </button>
+                  ))}
                 <button
-                  onClick={() => onBook()}
+                  onClick={() => onBook({ date: selectedDate, start: '10:00', end: '11:00' })}
                   className="px-3 py-1.5 text-xs bg-white text-gray-900 hover:bg-white/90 rounded-md transition-colors whitespace-nowrap font-medium"
                 >
-                  Другое время…
+                  {isToday ? 'Другое время…' : `Забронировать на ${selectedDate.slice(8, 10)}.${selectedDate.slice(5, 7)}…`}
                 </button>
               </div>
             )}
@@ -215,40 +245,89 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
             )}
           </div>
 
-          {/* Далее */}
-          {next && (
-            <div className="rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 p-4">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-white/40 text-lg font-light tracking-widest uppercase">Далее</span>
-                <span className="text-white/70 text-sm whitespace-nowrap">
-                  с {fmtTime(next.start)} до {fmtTime(next.end)}
-                </span>
+          {/* Далее (сегодня) / первая встреча выбранного дня */}
+          {(next ?? firstOfDay) && (() => {
+            const b = (next ?? firstOfDay)!;
+            return (
+              <div className="rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 p-4">
+                <div className="flex items-baseline justify-between gap-3">
+                  <span className="text-white/40 text-lg font-light tracking-widest uppercase">
+                    {next ? 'Далее' : 'В этот день'}
+                  </span>
+                  <span className="text-white/70 text-sm whitespace-nowrap">
+                    с {fmtTime(b.start)} до {fmtTime(b.end)}
+                  </span>
+                </div>
+                <div className="mt-2 text-sm font-medium truncate">{b.subject}</div>
+                {b.organizer && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Avatar login="" name={b.organizer} size={28} />
+                    <span className="text-xs text-white/70">{b.organizer}</span>
+                  </div>
+                )}
+                {(b.attendees.length > 0 || b.optionalAttendees.length > 0) && (
+                  <div className="text-[10px] text-white/40 mt-1.5 truncate">
+                    {b.attendees.length > 0 && <>Участники: {b.attendees.join(', ')}</>}
+                    {b.optionalAttendees.length > 0 && (
+                      <span className="text-white/25"> · необязательные: {b.optionalAttendees.join(', ')}</span>
+                    )}
+                  </div>
+                )}
               </div>
-              <div className="mt-2 text-sm font-medium truncate">{next.subject}</div>
-              {next.organizer && (
-                <div className="flex items-center gap-2 mt-2">
-                  <Avatar login="" name={next.organizer} size={28} />
-                  <span className="text-xs text-white/70">{next.organizer}</span>
-                </div>
-              )}
-              {next.attendees.length > 0 && (
-                <div className="text-[10px] text-white/40 mt-1.5 truncate" title={next.attendees.join(', ')}>
-                  Участники: {next.attendees.join(', ')}
-                </div>
-              )}
-            </div>
-          )}
+            );
+          })()}
         </div>
 
-        {/* ===== Правая часть: таймлайн дня ===== */}
+        {/* ===== Правая часть: таймлайн выбранного дня ===== */}
         <div className="w-60 bg-white flex flex-col shrink-0">
-          <div className="px-4 py-3 border-b border-gray-100 flex items-baseline justify-between">
-            <span className="text-sm font-semibold text-gray-800">
-              {WEEKDAYS[now.getDay()]}, {String(now.getDate()).padStart(2, '0')}.{String(now.getMonth() + 1).padStart(2, '0')}.{now.getFullYear()}
-            </span>
-            <span className="text-sm text-gray-400 tabular-nums">
-              {fmtHM(now.getHours(), now.getMinutes())}
-            </span>
+          <div className="px-3 py-2 border-b border-gray-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <button
+                onClick={() => setSelectedDate((d) => addDays(d, -1))}
+                disabled={isToday}
+                className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:pointer-events-none"
+                title="Предыдущий день"
+              >
+                ‹
+              </button>
+              <span className="text-sm font-semibold text-gray-800">
+                {WEEKDAYS[new Date(selectedDate + 'T00:00:00').getDay()]}, {selectedDate.slice(8, 10)}.{selectedDate.slice(5, 7)}.{selectedDate.slice(0, 4)}
+              </span>
+              <button
+                onClick={() => setSelectedDate((d) => addDays(d, 1))}
+                className="w-6 h-6 flex items-center justify-center rounded text-gray-400 hover:text-gray-700 hover:bg-gray-100"
+                title="Следующий день"
+              >
+                ›
+              </button>
+            </div>
+            {/* Лента ближайших дней */}
+            <div className="flex gap-0.5 justify-between">
+              {dayStrip.map((d) => (
+                <button
+                  key={d.iso}
+                  onClick={() => setSelectedDate(d.iso)}
+                  className={`flex-1 flex flex-col items-center rounded-md py-1 transition-colors ${
+                    selectedDate === d.iso
+                      ? 'bg-accent text-white'
+                      : 'text-gray-500 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="text-[9px] leading-3 opacity-70">{d.weekday}</span>
+                  <span className="text-[11px] font-semibold leading-4">{d.day}</span>
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center justify-between mt-1">
+              {!isToday ? (
+                <button onClick={() => setSelectedDate(todayISO())} className="text-[10px] text-accent hover:underline">
+                  ← Сегодня
+                </button>
+              ) : (
+                <span />
+              )}
+              <span className="text-[10px] text-gray-300 tabular-nums">{fmtHM(now.getHours(), now.getMinutes())}</span>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto">
@@ -273,8 +352,8 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
                 );
               })}
 
-              {/* Линия «сейчас» */}
-              {nowOffset >= 0 && nowOffset <= (DAY_END_H - DAY_START_H) * 60 && (
+              {/* Линия «сейчас» — только на сегодняшнем дне */}
+              {isToday && nowOffset >= 0 && nowOffset <= (DAY_END_H - DAY_START_H) * 60 && (
                 <div
                   className="absolute left-0 right-0 border-t-2 border-red-400 z-10 pointer-events-none"
                   style={{ top: nowOffset * PX_PER_MIN }}
@@ -289,7 +368,7 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
                   key={`${h}-${m}`}
                   onClick={() =>
                     onBook({
-                      date: todayISO(),
+                      date: selectedDate,
                       start: fmtHM(h, m),
                       end: m === 30 ? fmtHM(h + 1, 0) : fmtHM(h, 30),
                     })
@@ -322,9 +401,9 @@ export default function MeetingRoomCard({ room, status, onClose, onBook, refresh
                         <span className="text-[9px] text-sky-700 truncate">{b.organizer}</span>
                       </div>
                     )}
-                    {height > 50 && b.attendees.length > 0 && (
+                    {height > 50 && b.attendees.length + b.optionalAttendees.length > 0 && (
                       <div className="text-[9px] text-sky-600/70 truncate mt-0.5">
-                        +{b.attendees.length} участн.
+                        +{b.attendees.length + b.optionalAttendees.length} участн.
                       </div>
                     )}
                   </div>
