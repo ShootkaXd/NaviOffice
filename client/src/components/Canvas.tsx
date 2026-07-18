@@ -6,6 +6,7 @@ import { uid, snap, lastName, initials, DESK_RADIUS, DESK_FREE_COLOR, DESK_OCCUP
 import { fetchFloorBackground } from '../api';
 import { usePhoto } from './Avatar';
 import EmployeeCard from './EmployeeCard';
+import RoomCard from './RoomCard';
 import AssignDialog from './AssignDialog';
 import MeetingRoomCard, { BookingPrefill } from './MeetingRoomCard';
 import BookingDialog from './BookingDialog';
@@ -87,6 +88,45 @@ function svgPoint(svg: SVGSVGElement, clientX: number, clientY: number) {
   return { x: transformed.x, y: transformed.y };
 }
 
+function DeskOccupant({ desk, a, index, total }: { desk: Desk; a: { login: string; displayName: string }; index: number; total: number }) {
+  const photo = usePhoto(a.login);
+  const offset = total === 1 ? 0 : index === 0 ? -7 : 7;
+  const clipId = `desk-clip-${desk.id}-${index}`;
+  return (
+    <>
+      <clipPath id={clipId}>
+        <circle cx={desk.x + offset} cy={desk.y - 2} r={total === 1 ? 11 : 8} />
+      </clipPath>
+      <circle cx={desk.x + offset} cy={desk.y - 2} r={total === 1 ? 11 : 8} fill={DESK_OCCUPIED_COLOR} pointerEvents="none" />
+      {photo ? (
+        <image
+          href={photo}
+          x={desk.x + offset - (total === 1 ? 11 : 8)}
+          y={desk.y - 2 - (total === 1 ? 11 : 8)}
+          width={(total === 1 ? 11 : 8) * 2}
+          height={(total === 1 ? 11 : 8) * 2}
+          clipPath={`url(#${clipId})`}
+          preserveAspectRatio="xMidYMid slice"
+          pointerEvents="none"
+        />
+      ) : (
+        <text
+          x={desk.x + offset}
+          y={desk.y + (total === 1 ? 1 : 0)}
+          textAnchor="middle"
+          fontSize={total === 1 ? 8 : 6.5}
+          fill="white"
+          fontWeight="600"
+          pointerEvents="none"
+          style={{ userSelect: 'none' }}
+        >
+          {initials(a.displayName)}
+        </text>
+      )}
+    </>
+  );
+}
+
 function DeskNode({
   desk,
   isSelected,
@@ -100,10 +140,9 @@ function DeskNode({
   onMouseDown: (e: React.MouseEvent) => void;
   onClick: (e: React.MouseEvent) => void;
 }) {
-  const occupied = !!desk.assignment;
-  const photo = usePhoto(desk.assignment?.login ?? null);
-  const color = occupied ? DESK_OCCUPIED_COLOR : DESK_FREE_COLOR;
-  const clipId = `desk-clip-${desk.id}`;
+  const occupants = desk.assignments;
+  const occupied = occupants.length > 0;
+  const color = desk.color ?? (occupied ? DESK_OCCUPIED_COLOR : DESK_FREE_COLOR);
 
   return (
     <g onMouseDown={onMouseDown} onClick={onClick} style={{ cursor: 'pointer' }}>
@@ -140,35 +179,9 @@ function DeskNode({
       )}
       {occupied ? (
         <>
-          <clipPath id={clipId}>
-            <circle cx={desk.x} cy={desk.y - 2} r={11} />
-          </clipPath>
-          <circle cx={desk.x} cy={desk.y - 2} r={11} fill={DESK_OCCUPIED_COLOR} pointerEvents="none" />
-          {photo ? (
-            <image
-              href={photo}
-              x={desk.x - 11}
-              y={desk.y - 13}
-              width={22}
-              height={22}
-              clipPath={`url(#${clipId})`}
-              preserveAspectRatio="xMidYMid slice"
-              pointerEvents="none"
-            />
-          ) : (
-            <text
-              x={desk.x}
-              y={desk.y + 1}
-              textAnchor="middle"
-              fontSize={8}
-              fill="white"
-              fontWeight="600"
-              pointerEvents="none"
-              style={{ userSelect: 'none' }}
-            >
-              {initials(desk.assignment!.displayName)}
-            </text>
-          )}
+          {occupants.map((a, i) => (
+            <DeskOccupant key={a.login} desk={desk} a={a} index={i} total={occupants.length} />
+          ))}
           <text
             x={desk.x}
             y={desk.y + 15}
@@ -179,7 +192,7 @@ function DeskNode({
             pointerEvents="none"
             style={{ userSelect: 'none' }}
           >
-            {lastName(desk.assignment!.displayName)}
+            {occupants.map((a) => lastName(a.displayName)).join(' / ')}
           </text>
           <text
             x={desk.x}
@@ -319,6 +332,8 @@ export default function Canvas() {
   const [card, setCard] = useState<CardState | null>(null);
   const [assignFor, setAssignFor] = useState<string | null>(null);
   const [meetingCard, setMeetingCard] = useState<MeetingCardState | null>(null);
+  const [roomCard, setRoomCard] = useState<{ roomId: string; x: number; y: number } | null>(null);
+  const [roomAssignFor, setRoomAssignFor] = useState<string | null>(null);
   const [bookingFor, setBookingFor] = useState<string | null>(null);
   const [bookingPrefill, setBookingPrefill] = useState<BookingPrefill | undefined>(undefined);
   const [scheduleKey, setScheduleKey] = useState(0);
@@ -331,6 +346,12 @@ export default function Canvas() {
     : undefined;
   const assignDeskEl = assignFor
     ? (state.elements.find((el) => el.id === assignFor && el.type === 'desk') as Desk | undefined)
+    : undefined;
+  const roomCardRoom = roomCard
+    ? (state.elements.find((el) => el.id === roomCard.roomId && el.type === 'room') as Room | undefined)
+    : undefined;
+  const roomAssignEl = roomAssignFor
+    ? (state.elements.find((el) => el.id === roomAssignFor && el.type === 'room') as Room | undefined)
     : undefined;
   const meetingCardRoom = meetingCard
     ? (state.elements.find((el) => el.id === meetingCard.roomId && el.type === 'meeting') as MeetingRoom | undefined)
@@ -376,6 +397,8 @@ export default function Canvas() {
     setAssignFor(null);
     setMeetingCard(null);
     setBookingFor(null);
+    setRoomCard(null);
+    setRoomAssignFor(null);
   }, [state.currentFloorId]);
 
   // Фокус на столе из поиска: подлететь и подсветить ~2 секунды.
@@ -426,7 +449,8 @@ export default function Canvas() {
         y: snap(pt.y),
         name: `D${currentElements.filter((el) => el.type === 'desk').length + 1}`,
         rotation: 0,
-        assignment: null,
+        color: null,
+        assignments: [],
         floorId: state.currentFloorId,
       };
       dispatch({ type: 'ADD_ELEMENT', payload: desk });
@@ -568,6 +592,7 @@ export default function Canvas() {
             capacity: 4,
             floorId: state.currentFloorId,
             points: null,
+            assignments: [],
           };
           dispatch({ type: 'ADD_ELEMENT', payload: room });
         }
@@ -611,6 +636,23 @@ export default function Canvas() {
     const x = Math.min(Math.max(e.clientX - rect.left + 14, 8), Math.max(8, rect.width - CARD_W - 8));
     const y = Math.min(Math.max(e.clientY - rect.top - 24, 8), Math.max(8, rect.height - CARD_H - 8));
     setCard({ deskId: desk.id, x, y });
+  }
+
+  function onRoomClick(e: React.MouseEvent, room: Room) {
+    e.stopPropagation();
+    if (movedRef.current) {
+      movedRef.current = false;
+      return;
+    }
+    if (canEdit && state.tool !== 'select') return;
+    if (canEdit) return; // в режиме редактора комнату выбирают для правки, карточка не нужна
+    setCard(null);
+    setMeetingCard(null);
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const x = Math.min(Math.max(e.clientX - rect.left + 14, 8), Math.max(8, rect.width - MEETING_CARD_W - 8));
+    const y = Math.min(Math.max(e.clientY - rect.top - 24, 8), Math.max(8, rect.height - MEETING_CARD_H - 8));
+    setRoomCard({ roomId: room.id, x, y });
   }
 
   function onMeetingClick(e: React.MouseEvent, room: MeetingRoom) {
@@ -772,8 +814,9 @@ export default function Canvas() {
                   strokeWidth={isSelected ? 2 : 1.5}
                   strokeOpacity={isSelected ? 1 : 0.7}
                   strokeLinejoin="round"
-                  style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'default' }}
+                  style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'pointer' }}
                   onMouseDown={(e) => onElementMouseDown(e, room)}
+                  onClick={(e) => onRoomClick(e, room)}
                 />
               ) : (
                 <rect
@@ -787,8 +830,9 @@ export default function Canvas() {
                   strokeWidth={isSelected ? 2 : 1.5}
                   strokeOpacity={isSelected ? 1 : 0.7}
                   rx={4}
-                  style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'default' }}
+                  style={{ cursor: canEdit && state.tool === 'select' ? 'grab' : 'pointer' }}
                   onMouseDown={(e) => onElementMouseDown(e, room)}
+                  onClick={(e) => onRoomClick(e, room)}
                 />
               )}
               <text
@@ -1049,6 +1093,20 @@ export default function Canvas() {
       {/* Assign dialog */}
       {assignDeskEl && (
         <AssignDialog desk={assignDeskEl} onClose={() => setAssignFor(null)} />
+      )}
+
+      {/* Карточка помещения */}
+      {roomCardRoom && roomCard && (
+        <RoomCard
+          room={roomCardRoom}
+          x={roomCard.x}
+          y={roomCard.y}
+          onClose={() => setRoomCard(null)}
+          onAssign={() => setRoomAssignFor(roomCardRoom.id)}
+        />
+      )}
+      {roomAssignEl && (
+        <AssignDialog room={roomAssignEl} onClose={() => setRoomAssignFor(null)} />
       )}
 
       {/* Панель переговорной */}

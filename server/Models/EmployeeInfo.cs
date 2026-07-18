@@ -9,6 +9,8 @@ public class EmployeeInfo
     public string? Title { get; set; }
     public string? Email { get; set; }
     public string Role { get; set; } = "User";
+    /// <summary>Логин руководителя (LDAP manager); null — не задан.</summary>
+    public string? ManagerLogin { get; set; }
     /// <summary>Raw photo bytes (e.g. thumbnailPhoto from AD); null when absent.</summary>
     public byte[]? Photo { get; set; }
     public string? PhotoContentType { get; set; }

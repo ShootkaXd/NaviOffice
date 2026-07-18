@@ -73,4 +73,22 @@ public class CachedEmployeeDirectory : IEmployeeDirectory
 
         return result;
     }
+
+    public async Task<IReadOnlyList<EmployeeInfo>> GetDirectReportsAsync(string managerLogin)
+    {
+        if (string.IsNullOrWhiteSpace(managerLogin))
+        {
+            return Array.Empty<EmployeeInfo>();
+        }
+
+        var key = $"emp:reports:{managerLogin.Trim().ToLowerInvariant()}";
+        if (_cache.TryGetValue(key, out IReadOnlyList<EmployeeInfo>? cached) && cached != null)
+        {
+            return cached;
+        }
+
+        var result = await _ldap.GetDirectReportsAsync(managerLogin.Trim());
+        _cache.Set(key, result, CacheDuration);
+        return result;
+    }
 }

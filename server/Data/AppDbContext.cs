@@ -16,6 +16,9 @@ public class AppDbContext : DbContext
     public DbSet<MeetingRoom> MeetingRooms => Set<MeetingRoom>();
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<Marker> Markers => Set<Marker>();
+    public DbSet<Office> Offices => Set<Office>();
+    public DbSet<RoomAssignment> RoomAssignments => Set<RoomAssignment>();
+    public DbSet<Presence> Presences => Set<Presence>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -47,13 +50,44 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<Assignment>(e =>
         {
-            e.HasKey(a => a.DeskId);
+            e.HasKey(a => a.Id);
             e.Property(a => a.EmployeeLogin).IsRequired();
             e.HasIndex(a => a.EmployeeLogin).IsUnique();
+            e.HasIndex(a => a.DeskId);
             e.HasOne(a => a.Desk)
-                .WithOne(d => d.Assignment)
-                .HasForeignKey<Assignment>(a => a.DeskId)
+                .WithMany(d => d.Assignments)
+                .HasForeignKey(a => a.DeskId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Office>(e =>
+        {
+            e.HasKey(o => o.Id);
+            e.Property(o => o.Name).IsRequired();
+            e.HasMany(o => o.Floors)
+                .WithOne()
+                .HasForeignKey(f => f.OfficeId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<RoomAssignment>(e =>
+        {
+            e.HasKey(r => r.Id);
+            e.Property(r => r.EmployeeLogin).IsRequired();
+            e.HasIndex(r => new { r.RoomId, r.EmployeeLogin }).IsUnique();
+            e.HasOne(r => r.Room)
+                .WithMany()
+                .HasForeignKey(r => r.RoomId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Presence>(e =>
+        {
+            e.HasKey(p => p.Id);
+            e.Property(p => p.EmployeeLogin).IsRequired();
+            e.Property(p => p.Date).IsRequired();
+            e.Property(p => p.Status).IsRequired();
+            e.HasIndex(p => new { p.EmployeeLogin, p.Date }).IsUnique();
         });
 
         modelBuilder.Entity<MeetingRoom>(e =>

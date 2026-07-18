@@ -12,6 +12,9 @@ namespace NaviOffice.Api.Controllers;
 [Authorize(Policy = "Secretary")] // Admin ИЛИ Secretary
 public class DesksController : ControllerBase
 {
+    /// <summary>Максимум сотрудников на одном месте (шеринг стола).</summary>
+    public const int MaxPerDesk = 2;
+
     private readonly AppDbContext _db;
     private readonly IEmployeeDirectory _directory;
 
@@ -21,9 +24,12 @@ public class DesksController : ControllerBase
         _directory = directory;
     }
 
-    /// <summary>Назначить сотрудника на стол. Одно место = один сотрудник; переназначение снимает сотрудника со старого места.</summary>
+    /// <summary>
+    /// Назначить сотрудника на стол (добавляется к уже сидящим, максимум двое).
+    /// Сотрудник может занимать только одно место — со старого снимается.
+    /// </summary>
     [HttpPut("{id:guid}/assignment")]
-    public async Task<ActionResult<DeskDto>> Assign(Guid id, [FromBody] AssignRequest request)
+    public async Task<IActionResult> Assign(Guid id, [FromBody] AssignRequest request)
     {
         var desk = await _db.Desks.FindAsync(id);
         if (desk == null)
@@ -43,67 +49,59 @@ public class DesksController : ControllerBase
             return BadRequest(new { message = $"Сотрудник '{login}' не найден в справочнике" });
         }
 
-        var normalizedLogin = employee.Login; // канонический логин из справочника
+        var normalizedLogin = employee.Login;
+        var loginLower = normalizedLogin.ToLower();
         var assignedBy = User.FindFirst("sub")?.Value ?? "unknown";
 
+        var deskAssignments = await _db.Assignments.Where(a => a.DeskId == id).ToListAsync();
+        if (deskAssignments.Any(a => a.EmployeeLogin.ToLower() == loginLower))
+        {
+            return Ok(new { message = "Сотрудник уже на этом месте" });
+        }
+        if (deskAssignments.Count >= MaxPerDesk)
+        {
+            return Conflict(new { message = $"На месте уже {MaxPerDesk} сотрудника — снимите кого-нибудь" });
+        }
+
         // Сотрудник может занимать только одно место: снимаем со старого.
-        var loginLower = normalizedLogin.ToLower();
         var previous = await _db.Assignments
             .Where(a => a.EmployeeLogin.ToLower() == loginLower && a.DeskId != id)
             .ToListAsync();
-        if (previous.Count > 0)
-        {
-            _db.Assignments.RemoveRange(previous);
-            await _db.SaveChangesAsync();
-        }
+        _db.Assignments.RemoveRange(previous);
 
-        // Одно место = один сотрудник: заменяем текущее назначение стола.
-        var current = await _db.Assignments.FindAsync(id);
-        if (current != null)
+        _db.Assignments.Add(new Assignment
         {
-            current.EmployeeLogin = normalizedLogin;
-            current.AssignedBy = assignedBy;
-            current.AssignedAt = DateTime.UtcNow;
-        }
-        else
-        {
-            _db.Assignments.Add(new Assignment
-            {
-                DeskId = id,
-                EmployeeLogin = normalizedLogin,
-                AssignedBy = assignedBy,
-                AssignedAt = DateTime.UtcNow
-            });
-        }
-
+            Id = Guid.NewGuid(),
+            DeskId = id,
+            EmployeeLogin = normalizedLogin,
+            AssignedBy = assignedBy,
+            AssignedAt = DateTime.UtcNow
+        });
         await _db.SaveChangesAsync();
 
-        return Ok(MapController.ToDeskDto(desk, new DeskAssignmentDto
-        {
-            Login = normalizedLogin,
-            DisplayName = employee.DisplayName,
-            Department = employee.Department,
-            Title = employee.Title
-        }));
+        return Ok();
     }
 
-    /// <summary>Снять сотрудника со стола.</summary>
-    [HttpDelete("{id:guid}/assignment")]
-    public async Task<ActionResult<DeskDto>> Unassign(Guid id)
+    /// <summary>Снять конкретного сотрудника со стола.</summary>
+    [HttpDelete("{id:guid}/assignment/{login}")]
+    public async Task<IActionResult> UnassignOne(Guid id, string login)
     {
-        var desk = await _db.Desks.FindAsync(id);
-        if (desk == null)
-        {
-            return NotFound(new { message = "Стол не найден" });
-        }
+        var loginLower = login.Trim().ToLower();
+        var assignments = await _db.Assignments
+            .Where(a => a.DeskId == id && a.EmployeeLogin.ToLower() == loginLower)
+            .ToListAsync();
+        _db.Assignments.RemoveRange(assignments);
+        await _db.SaveChangesAsync();
+        return NoContent();
+    }
 
-        var assignment = await _db.Assignments.FindAsync(id);
-        if (assignment != null)
-        {
-            _db.Assignments.Remove(assignment);
-            await _db.SaveChangesAsync();
-        }
-
-        return Ok(MapController.ToDeskDto(desk, null));
+    /// <summary>Снять всех сотрудников со стола (обратная совместимость).</summary>
+    [HttpDelete("{id:guid}/assignment")]
+    public async Task<IActionResult> UnassignAll(Guid id)
+    {
+        var assignments = await _db.Assignments.Where(a => a.DeskId == id).ToListAsync();
+        _db.Assignments.RemoveRange(assignments);
+        await _db.SaveChangesAsync();
+        return NoContent();
     }
 }

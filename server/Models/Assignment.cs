@@ -1,8 +1,9 @@
 namespace NaviOffice.Api.Models;
 
+/// <summary>Назначение сотрудника на место. На одном месте может сидеть до двух сотрудников.</summary>
 public class Assignment
 {
-    /// <summary>Primary key and FK to Desk (one desk = one assignment).</summary>
+    public Guid Id { get; set; }
     public Guid DeskId { get; set; }
     public string EmployeeLogin { get; set; } = "";
     public string AssignedBy { get; set; } = "";

@@ -14,19 +14,19 @@ public class DemoLdapService : ILdapService
     {
         new EmployeeInfo { Login = "admin", DisplayName = "Администратор Системы", Department = "ИТ", Title = "Системный администратор", Email = "admin@navioffice.local", Role = "Admin" },
         new EmployeeInfo { Login = "secretary", DisplayName = "Орлова Виктория Сергеевна", Department = "HR", Title = "Секретарь", Email = "secretary@navioffice.local", Role = "Secretary" },
-        new EmployeeInfo { Login = "user", DisplayName = "Демидов Пользователь Иванович", Department = "ИТ", Title = "Специалист", Email = "user@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "ivanov.p", DisplayName = "Иванов Пётр Сергеевич", Department = "ИТ", Title = "Ведущий разработчик", Email = "ivanov.p@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "petrova.a", DisplayName = "Петрова Анна Владимировна", Department = "Бухгалтерия", Title = "Главный бухгалтер", Email = "petrova.a@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "sidorov.a", DisplayName = "Сидоров Алексей Николаевич", Department = "ИТ", Title = "DevOps-инженер", Email = "sidorov.a@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "user", ManagerLogin = "ivanov.p", DisplayName = "Демидов Пользователь Иванович", Department = "ИТ", Title = "Специалист", Email = "user@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "ivanov.p", ManagerLogin = "admin", DisplayName = "Иванов Пётр Сергеевич", Department = "ИТ", Title = "Ведущий разработчик", Email = "ivanov.p@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "petrova.a", ManagerLogin = "admin", DisplayName = "Петрова Анна Владимировна", Department = "Бухгалтерия", Title = "Главный бухгалтер", Email = "petrova.a@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "sidorov.a", ManagerLogin = "ivanov.p", DisplayName = "Сидоров Алексей Николаевич", Department = "ИТ", Title = "DevOps-инженер", Email = "sidorov.a@navioffice.local", Role = "User" },
         new EmployeeInfo { Login = "kuznetsova.m", DisplayName = "Кузнецова Мария Игоревна", Department = "HR", Title = "Менеджер по персоналу", Email = "kuznetsova.m@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "smirnov.d", DisplayName = "Смирнов Дмитрий Андреевич", Department = "Продажи", Title = "Менеджер по продажам", Email = "smirnov.d@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "smirnov.d", ManagerLogin = "nikolaev.s", DisplayName = "Смирнов Дмитрий Андреевич", Department = "Продажи", Title = "Менеджер по продажам", Email = "smirnov.d@navioffice.local", Role = "User" },
         new EmployeeInfo { Login = "volkova.e", DisplayName = "Волкова Елена Павловна", Department = "Маркетинг", Title = "Маркетолог", Email = "volkova.e@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "fedorov.i", DisplayName = "Фёдоров Игорь Викторович", Department = "ИТ", Title = "Разработчик", Email = "fedorov.i@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "morozova.o", DisplayName = "Морозова Ольга Дмитриевна", Department = "Бухгалтерия", Title = "Бухгалтер", Email = "morozova.o@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "fedorov.i", ManagerLogin = "ivanov.p", DisplayName = "Фёдоров Игорь Викторович", Department = "ИТ", Title = "Разработчик", Email = "fedorov.i@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "morozova.o", ManagerLogin = "petrova.a", DisplayName = "Морозова Ольга Дмитриевна", Department = "Бухгалтерия", Title = "Бухгалтер", Email = "morozova.o@navioffice.local", Role = "User" },
         new EmployeeInfo { Login = "nikolaev.s", DisplayName = "Николаев Сергей Александрович", Department = "Продажи", Title = "Руководитель отдела продаж", Email = "nikolaev.s@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "pavlova.t", DisplayName = "Павлова Татьяна Юрьевна", Department = "HR", Title = "Рекрутер", Email = "pavlova.t@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "sokolov.a", DisplayName = "Соколов Андрей Михайлович", Department = "Маркетинг", Title = "SMM-специалист", Email = "sokolov.a@navioffice.local", Role = "User" },
-        new EmployeeInfo { Login = "vasileva.n", DisplayName = "Васильева Наталья Олеговна", Department = "ИТ", Title = "Инженер по тестированию", Email = "vasileva.n@navioffice.local", Role = "User" }
+        new EmployeeInfo { Login = "pavlova.t", ManagerLogin = "kuznetsova.m", DisplayName = "Павлова Татьяна Юрьевна", Department = "HR", Title = "Рекрутер", Email = "pavlova.t@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "sokolov.a", ManagerLogin = "volkova.e", DisplayName = "Соколов Андрей Михайлович", Department = "Маркетинг", Title = "SMM-специалист", Email = "sokolov.a@navioffice.local", Role = "User" },
+        new EmployeeInfo { Login = "vasileva.n", ManagerLogin = "ivanov.p", DisplayName = "Васильева Наталья Олеговна", Department = "ИТ", Title = "Инженер по тестированию", Email = "vasileva.n@navioffice.local", Role = "User" }
     };
 
     public Task<EmployeeInfo?> AuthenticateAsync(string username, string password)
@@ -70,6 +70,14 @@ public class DemoLdapService : ILdapService
 
         var avatar = AvatarGenerator.Generate(employee.Login, employee.DisplayName);
         return Task.FromResult<(byte[], string)?>(avatar);
+    }
+
+    public Task<IReadOnlyList<EmployeeInfo>> GetDirectReportsAsync(string managerLogin)
+    {
+        var reports = Employees
+            .Where(e => string.Equals(e.ManagerLogin, managerLogin?.Trim(), StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        return Task.FromResult<IReadOnlyList<EmployeeInfo>>(reports);
     }
 
     private static EmployeeInfo? Find(string login)

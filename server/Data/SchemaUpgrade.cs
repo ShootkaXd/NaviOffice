@@ -28,6 +28,51 @@ public static class SchemaUpgrade
     private static void ApplyPostgres(AppDbContext db)
     {
         db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Offices" (
+                "Id" uuid NOT NULL CONSTRAINT "PK_Offices" PRIMARY KEY,
+                "Name" text NOT NULL,
+                "Order" integer NOT NULL
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""ALTER TABLE "Floors" ADD COLUMN IF NOT EXISTS "OfficeId" uuid NULL;""");
+        db.Database.ExecuteSqlRaw("""ALTER TABLE "Desks" ADD COLUMN IF NOT EXISTS "Color" text NULL;""");
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "RoomAssignments" (
+                "Id" uuid NOT NULL CONSTRAINT "PK_RoomAssignments" PRIMARY KEY,
+                "RoomId" uuid NOT NULL,
+                "EmployeeLogin" text NOT NULL,
+                "AssignedBy" text NOT NULL,
+                "AssignedAt" timestamp NOT NULL,
+                CONSTRAINT "FK_RoomAssignments_Rooms_RoomId" FOREIGN KEY ("RoomId") REFERENCES "Rooms" ("Id") ON DELETE CASCADE
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""CREATE UNIQUE INDEX IF NOT EXISTS "IX_RoomAssignments_RoomId_EmployeeLogin" ON "RoomAssignments" ("RoomId", "EmployeeLogin");""");
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Presences" (
+                "Id" uuid NOT NULL CONSTRAINT "PK_Presences" PRIMARY KEY,
+                "EmployeeLogin" text NOT NULL,
+                "Date" text NOT NULL,
+                "Status" text NOT NULL
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""CREATE UNIQUE INDEX IF NOT EXISTS "IX_Presences_EmployeeLogin_Date" ON "Presences" ("EmployeeLogin", "Date");""");
+
+        // Assignments: старая схема имела PK = DeskId (одно место — один сотрудник). Пересобираем с Id.
+        var oldPk = db.Database
+            .SqlQueryRaw<int>("""SELECT COUNT(*) AS "Value" FROM information_schema.columns WHERE table_name = 'Assignments' AND column_name = 'Id'""")
+            .AsEnumerable().First() == 0;
+        if (oldPk)
+        {
+            db.Database.ExecuteSqlRaw("""
+                ALTER TABLE "Assignments" ADD COLUMN "Id" uuid NULL;
+                UPDATE "Assignments" SET "Id" = gen_random_uuid();
+                ALTER TABLE "Assignments" ALTER COLUMN "Id" SET NOT NULL;
+                ALTER TABLE "Assignments" DROP CONSTRAINT "PK_Assignments";
+                ALTER TABLE "Assignments" ADD CONSTRAINT "PK_Assignments" PRIMARY KEY ("Id");
+                CREATE INDEX IF NOT EXISTS "IX_Assignments_DeskId" ON "Assignments" ("DeskId");
+                """);
+        }
+        db.Database.ExecuteSqlRaw("""
             CREATE TABLE IF NOT EXISTS "Markers" (
                 "Id" uuid NOT NULL CONSTRAINT "PK_Markers" PRIMARY KEY,
                 "FloorId" uuid NOT NULL,
@@ -96,10 +141,66 @@ public static class SchemaUpgrade
             CREATE INDEX IF NOT EXISTS "IX_Markers_FloorId" ON "Markers" ("FloorId");
             """);
 
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Offices" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Offices" PRIMARY KEY,
+                "Name" TEXT NOT NULL,
+                "Order" INTEGER NOT NULL
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "RoomAssignments" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_RoomAssignments" PRIMARY KEY,
+                "RoomId" TEXT NOT NULL,
+                "EmployeeLogin" TEXT NOT NULL,
+                "AssignedBy" TEXT NOT NULL,
+                "AssignedAt" TEXT NOT NULL,
+                CONSTRAINT "FK_RoomAssignments_Rooms_RoomId" FOREIGN KEY ("RoomId") REFERENCES "Rooms" ("Id") ON DELETE CASCADE
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""CREATE UNIQUE INDEX IF NOT EXISTS "IX_RoomAssignments_RoomId_EmployeeLogin" ON "RoomAssignments" ("RoomId", "EmployeeLogin");""");
+        db.Database.ExecuteSqlRaw("""
+            CREATE TABLE IF NOT EXISTS "Presences" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_Presences" PRIMARY KEY,
+                "EmployeeLogin" TEXT NOT NULL,
+                "Date" TEXT NOT NULL,
+                "Status" TEXT NOT NULL
+            );
+            """);
+        db.Database.ExecuteSqlRaw("""CREATE UNIQUE INDEX IF NOT EXISTS "IX_Presences_EmployeeLogin_Date" ON "Presences" ("EmployeeLogin", "Date");""");
+
         AddColumnIfMissing(db, "Floors", "BackgroundImage", "BLOB NULL");
         AddColumnIfMissing(db, "Floors", "BackgroundContentType", "TEXT NULL");
+        AddColumnIfMissing(db, "Floors", "OfficeId", "TEXT NULL");
         AddColumnIfMissing(db, "Rooms", "PointsJson", "TEXT NULL");
         AddColumnIfMissing(db, "Bookings", "AttendeesJson", "TEXT NULL");
+        AddColumnIfMissing(db, "Desks", "Color", "TEXT NULL");
+
+        // Assignments: старая схема имела PK = DeskId. SQLite не меняет PK — пересборка таблицы.
+        var hasIdColumn = db.Database
+            .SqlQueryRaw<int>("SELECT COUNT(*) AS \"Value\" FROM pragma_table_info('Assignments') WHERE \"name\" = 'Id'")
+            .AsEnumerable().First() > 0;
+        if (!hasIdColumn)
+        {
+            db.Database.ExecuteSqlRaw("""
+                CREATE TABLE "Assignments_new" (
+                    "Id" TEXT NOT NULL CONSTRAINT "PK_Assignments" PRIMARY KEY,
+                    "DeskId" TEXT NOT NULL,
+                    "EmployeeLogin" TEXT NOT NULL,
+                    "AssignedBy" TEXT NOT NULL,
+                    "AssignedAt" TEXT NOT NULL,
+                    CONSTRAINT "FK_Assignments_Desks_DeskId" FOREIGN KEY ("DeskId") REFERENCES "Desks" ("Id") ON DELETE CASCADE
+                );
+                INSERT INTO "Assignments_new" ("Id", "DeskId", "EmployeeLogin", "AssignedBy", "AssignedAt")
+                    SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-a' || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6))),
+                           "DeskId", "EmployeeLogin", "AssignedBy", "AssignedAt"
+                    FROM "Assignments";
+                DROP TABLE "Assignments";
+                ALTER TABLE "Assignments_new" RENAME TO "Assignments";
+                CREATE UNIQUE INDEX "IX_Assignments_EmployeeLogin" ON "Assignments" ("EmployeeLogin");
+                CREATE INDEX "IX_Assignments_DeskId" ON "Assignments" ("DeskId");
+                """);
+        }
     }
 
     private static void AddColumnIfMissing(AppDbContext db, string table, string column, string definition)

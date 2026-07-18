@@ -29,18 +29,21 @@ public class FloorsController : ControllerBase
             return BadRequest(new { message = "Название этажа обязательно" });
         }
 
+        var officeId = request.OfficeId
+            ?? (await _db.Offices.OrderBy(o => o.Order).Select(o => (Guid?)o.Id).FirstOrDefaultAsync());
         var maxOrder = await _db.Floors.Select(f => (int?)f.Order).MaxAsync() ?? 0;
         var floor = new Floor
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
-            Order = maxOrder + 1
+            Order = maxOrder + 1,
+            OfficeId = officeId
         };
 
         _db.Floors.Add(floor);
         await _db.SaveChangesAsync();
 
-        return Ok(new FloorDto { Id = floor.Id, Name = floor.Name, Order = floor.Order });
+        return Ok(new FloorDto { Id = floor.Id, Name = floor.Name, Order = floor.Order, OfficeId = floor.OfficeId });
     }
 
     [HttpPut("{id:guid}")]
@@ -163,6 +166,7 @@ public class FloorsController : ControllerBase
             desk.Y = dto.Y;
             desk.Name = dto.Name;
             desk.Rotation = dto.Rotation;
+            desk.Color = string.IsNullOrWhiteSpace(dto.Color) ? null : dto.Color;
         }
 
         // --- Meeting rooms (брони сохранившихся переговорных не трогаем; удалённые каскадно чистят брони) ---
@@ -233,15 +237,19 @@ public class FloorsController : ControllerBase
         var assignments = await _db.Assignments.AsNoTracking()
             .Where(a => deskIds.Contains(a.DeskId))
             .ToListAsync();
-        var assignmentDtos = new Dictionary<Guid, DeskAssignmentDto>();
+        var assignmentDtos = new Dictionary<Guid, List<DeskAssignmentDto>>();
         foreach (var assignment in assignments)
         {
-            assignmentDtos[assignment.DeskId] = await MapController.BuildAssignmentDto(_directory, assignment);
+            if (!assignmentDtos.TryGetValue(assignment.DeskId, out var list))
+            {
+                assignmentDtos[assignment.DeskId] = list = new List<DeskAssignmentDto>();
+            }
+            list.Add(await MapController.BuildAssignmentDto(_directory, assignment.EmployeeLogin));
         }
 
         return Ok(new FloorElementsResponse
         {
-            Rooms = rooms.Select(MapController.ToRoomDto).ToList(),
+            Rooms = rooms.Select(r => MapController.ToRoomDto(r)).ToList(),
             Desks = desks.Select(d => MapController.ToDeskDto(d,
                 assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList(),
             MeetingRooms = meetingRooms.Select(MapController.ToMeetingRoomDto).ToList(),

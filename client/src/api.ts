@@ -1,4 +1,4 @@
-import { BookingItem, Desk, DeskAssignment, Employee, Floor, MapElement, Marker, MeetingRoom, Point, Room, RoomStatus, User } from './types';
+import { BookingItem, Desk, DeskAssignment, Employee, Floor, MapElement, Marker, MeetingRoom, Office, Point, PresenceEntry, PresenceStatus, Room, RoomStatus, TeamMember, User } from './types';
 
 const TOKEN_KEY = 'navioffice_token';
 
@@ -110,6 +110,7 @@ interface RoomDto {
   color: string;
   capacity: number;
   points: Point[] | null;
+  assignments: DeskAssignment[];
 }
 
 interface MarkerDto {
@@ -128,7 +129,8 @@ interface DeskDto {
   y: number;
   name: string;
   rotation: number;
-  assignment: DeskAssignment | null;
+  color: string | null;
+  assignments: DeskAssignment[];
 }
 
 interface MeetingRoomDto {
@@ -145,6 +147,7 @@ interface MeetingRoomDto {
 }
 
 interface MapDto {
+  offices: Office[];
   floors: Floor[];
   rooms: RoomDto[];
   desks: DeskDto[];
@@ -153,17 +156,24 @@ interface MapDto {
 }
 
 export interface MapData {
+  offices: Office[];
   floors: Floor[];
   elements: MapElement[];
 }
 
 export async function getMap(): Promise<MapData> {
   const dto = await request<MapDto>('/api/map');
-  const rooms: Room[] = dto.rooms.map((r) => ({ ...r, points: r.points ?? null, type: 'room' }));
+  const rooms: Room[] = dto.rooms.map((r) => ({
+    ...r,
+    points: r.points ?? null,
+    assignments: r.assignments ?? [],
+    type: 'room',
+  }));
   const desks: Desk[] = dto.desks.map((d) => ({
     ...d,
     rotation: d.rotation ?? 0,
-    assignment: d.assignment ?? null,
+    color: d.color ?? null,
+    assignments: d.assignments ?? [],
     type: 'desk',
   }));
   const meetingRooms: MeetingRoom[] = (dto.meetingRooms ?? []).map((m) => ({
@@ -172,13 +182,13 @@ export async function getMap(): Promise<MapData> {
     type: 'meeting',
   }));
   const markers: Marker[] = (dto.markers ?? []).map((m) => ({ ...m, type: 'marker' }));
-  return { floors: dto.floors, elements: [...rooms, ...desks, ...meetingRooms, ...markers] };
+  return { offices: dto.offices ?? [], floors: dto.floors, elements: [...rooms, ...desks, ...meetingRooms, ...markers] };
 }
 
 // ---------- Floors ----------
 
-export function createFloor(name: string): Promise<Floor> {
-  return request('/api/floors', { method: 'POST', body: JSON.stringify({ name }) });
+export function createFloor(name: string, officeId?: string): Promise<Floor> {
+  return request('/api/floors', { method: 'POST', body: JSON.stringify({ name, officeId }) });
 }
 
 export function updateFloor(id: string, name: string, order: number): Promise<void> {
@@ -216,6 +226,7 @@ export function saveFloorElements(floorId: string, elements: MapElement[]): Prom
       y: d.y,
       name: d.name,
       rotation: d.rotation,
+      color: d.color,
     }));
   const meetingRooms = elements
     .filter((el): el is MeetingRoom => el.type === 'meeting')
@@ -329,6 +340,40 @@ export function assignDesk(deskId: string, login: string): Promise<void> {
   return request(`/api/desks/${deskId}/assignment`, { method: 'PUT', body: JSON.stringify({ login }) });
 }
 
-export function unassignDesk(deskId: string): Promise<void> {
-  return request(`/api/desks/${deskId}/assignment`, { method: 'DELETE' });
+export function unassignDesk(deskId: string, login?: string): Promise<void> {
+  const path = login
+    ? `/api/desks/${deskId}/assignment/${encodeURIComponent(login)}`
+    : `/api/desks/${deskId}/assignment`;
+  return request(path, { method: 'DELETE' });
+}
+
+// ---------- Офисы ----------
+
+export function createOffice(name: string): Promise<Office> {
+  return request('/api/offices', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+// ---------- Привязка к помещению ----------
+
+export function assignRoom(roomId: string, login: string): Promise<void> {
+  return request(`/api/rooms/${roomId}/assignment`, { method: 'PUT', body: JSON.stringify({ login }) });
+}
+
+export function unassignRoom(roomId: string, login: string): Promise<void> {
+  return request(`/api/rooms/${roomId}/assignment/${encodeURIComponent(login)}`, { method: 'DELETE' });
+}
+
+// ---------- Посещаемость ----------
+
+export function getPresence(logins: string[], from: string, to: string): Promise<PresenceEntry[]> {
+  const q = logins.length ? `logins=${encodeURIComponent(logins.join(','))}&` : '';
+  return request(`/api/presence?${q}from=${from}&to=${to}`);
+}
+
+export function setPresence(date: string, status: PresenceStatus | 'none', login?: string): Promise<void> {
+  return request('/api/presence', { method: 'PUT', body: JSON.stringify({ date, status, login }) });
+}
+
+export function getTeam(): Promise<TeamMember[]> {
+  return request('/api/team');
 }

@@ -6,6 +6,20 @@ public static class SeedData
 {
     public static void EnsureSeeded(AppDbContext db)
     {
+        // Офис по умолчанию + привязка «безофисных» этажей (миграция со старых версий).
+        var defaultOffice = db.Offices.OrderBy(o => o.Order).FirstOrDefault();
+        if (defaultOffice == null)
+        {
+            defaultOffice = new Office { Id = Guid.NewGuid(), Name = "Головной офис", Order = 1 };
+            db.Offices.Add(defaultOffice);
+            db.SaveChanges();
+        }
+        foreach (var orphan in db.Floors.Where(f => f.OfficeId == null).ToList())
+        {
+            orphan.OfficeId = defaultOffice.Id;
+        }
+        db.SaveChanges();
+
         if (db.Floors.Any())
         {
             return;
@@ -15,7 +29,8 @@ public static class SeedData
         {
             Id = Guid.NewGuid(),
             Name = "Этаж 1",
-            Order = 1
+            Order = 1,
+            OfficeId = defaultOffice.Id
         };
 
         var openSpace = new Room

@@ -350,18 +350,24 @@ function DeskProps({ desk, update }: { desk: Desk; update: (p: Partial<Desk>) =>
         />
       </label>
 
+      <ColorField value={desk.color ?? '#22c55e'} onChange={(color) => update({ color })} />
+
       <div className="mb-3">
-        <span className="text-white/50 text-xs block mb-1">Сотрудник</span>
-        {desk.assignment ? (
-          <div className="bg-sidebar-light border border-white/10 rounded-md px-2 py-1.5">
-            <div className="text-white text-xs">{desk.assignment.displayName}</div>
-            <div className="text-white/40 text-[10px]">{desk.assignment.department}</div>
+        <span className="text-white/50 text-xs block mb-1">Сотрудники</span>
+        {desk.assignments.length > 0 ? (
+          <div className="space-y-1">
+            {desk.assignments.map((a) => (
+              <div key={a.login} className="bg-sidebar-light border border-white/10 rounded-md px-2 py-1.5">
+                <div className="text-white text-xs">{a.displayName}</div>
+                <div className="text-white/40 text-[10px]">{a.department}</div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="text-white/30 text-xs px-1">Место свободно</div>
         )}
         <p className="text-white/20 text-[10px] mt-1.5">
-          Назначение — через карточку места на карте.
+          Назначение — через карточку места на карте (до двух сотрудников).
         </p>
       </div>
     </>

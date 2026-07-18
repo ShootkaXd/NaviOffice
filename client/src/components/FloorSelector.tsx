@@ -12,13 +12,15 @@ export default function FloorSelector() {
   const [editVal, setEditVal] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const floors = [...state.floors].sort((a, b) => a.order - b.order);
+  const floors = state.floors
+    .filter((f) => f.officeId === state.currentOfficeId)
+    .sort((a, b) => a.order - b.order);
 
   async function addFloor() {
     if (busy) return;
     setBusy(true);
     try {
-      const floor = await createFloor(`Этаж ${state.floors.length + 1}`);
+      const floor = await createFloor(`Этаж ${floors.length + 1}`, state.currentOfficeId || undefined);
       await refreshMap(dispatch);
       dispatch({ type: 'SET_FLOOR', payload: floor.id });
     } catch {

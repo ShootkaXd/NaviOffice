@@ -34,15 +34,25 @@ public class EmployeeDto
     public string? Title { get; set; }
     public string? Email { get; set; }
     public Guid? DeskId { get; set; }
+    public Guid? RoomId { get; set; }
+    public string? ManagerLogin { get; set; }
 }
 
 // ---- Map ----
+
+public class OfficeDto
+{
+    public Guid Id { get; set; }
+    public string Name { get; set; } = "";
+    public int Order { get; set; }
+}
 
 public class FloorDto
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = "";
     public int Order { get; set; }
+    public Guid? OfficeId { get; set; }
     public bool HasBackground { get; set; }
 }
 
@@ -65,6 +75,8 @@ public class RoomDto
     public int Capacity { get; set; }
     /// <summary>Вершины полигона; null — прямоугольник.</summary>
     public List<PointDto>? Points { get; set; }
+    /// <summary>Сотрудники, привязанные к помещению.</summary>
+    public List<DeskAssignmentDto> Assignments { get; set; } = new();
 }
 
 public class MarkerDto
@@ -93,7 +105,9 @@ public class DeskDto
     public double Y { get; set; }
     public string Name { get; set; } = "";
     public double Rotation { get; set; }
-    public DeskAssignmentDto? Assignment { get; set; }
+    public string? Color { get; set; }
+    /// <summary>До двух сотрудников на месте.</summary>
+    public List<DeskAssignmentDto> Assignments { get; set; } = new();
 }
 
 public class MeetingRoomDto
@@ -112,6 +126,7 @@ public class MeetingRoomDto
 
 public class MapResponse
 {
+    public List<OfficeDto> Offices { get; set; } = new();
     public List<FloorDto> Floors { get; set; } = new();
     public List<RoomDto> Rooms { get; set; } = new();
     public List<DeskDto> Desks { get; set; } = new();
@@ -124,6 +139,7 @@ public class MapResponse
 public class CreateFloorRequest
 {
     public string Name { get; set; } = "";
+    public Guid? OfficeId { get; set; }
 }
 
 public class UpdateFloorRequest
@@ -161,6 +177,7 @@ public class DeskElementDto
     public double Y { get; set; }
     public string Name { get; set; } = "";
     public double Rotation { get; set; }
+    public string? Color { get; set; }
 }
 
 public class MeetingRoomElementDto
@@ -235,4 +252,38 @@ public class CreateBookingRequest
 public class AssignRequest
 {
     public string Login { get; set; } = "";
+}
+
+// ---- Offices ----
+
+public class OfficeRequest
+{
+    public string Name { get; set; } = "";
+}
+
+// ---- Presence (посещаемость) ----
+
+public class PresenceDto
+{
+    public string Login { get; set; } = "";
+    public string Date { get; set; } = "";
+    /// <summary>office | remote | dayoff</summary>
+    public string Status { get; set; } = "";
+}
+
+public class SetPresenceRequest
+{
+    /// <summary>Логин; пусто — текущий пользователь (для чужих нужны права).</summary>
+    public string? Login { get; set; }
+    public string Date { get; set; } = "";
+    /// <summary>office | remote | dayoff | none (снять отметку)</summary>
+    public string Status { get; set; } = "";
+}
+
+public class TeamMemberDto
+{
+    public string Login { get; set; } = "";
+    public string DisplayName { get; set; } = "";
+    public string? Department { get; set; }
+    public string? Title { get; set; }
 }

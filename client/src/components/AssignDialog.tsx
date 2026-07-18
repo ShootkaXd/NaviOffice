@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react';
-import { Desk, Employee } from '../types';
+import { Desk, Employee, Room } from '../types';
 import { useStore, refreshMap } from '../store';
-import { assignDesk, searchEmployees } from '../api';
+import { assignDesk, assignRoom, searchEmployees } from '../api';
 import { showToast } from '../utils';
 import Avatar from './Avatar';
 
 interface AssignDialogProps {
-  desk: Desk;
+  desk?: Desk;
+  room?: Room;
   onClose: () => void;
 }
 
-export default function AssignDialog({ desk, onClose }: AssignDialogProps) {
+export default function AssignDialog({ desk, room, onClose }: AssignDialogProps) {
   const { state, dispatch } = useStore();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Employee[]>([]);
@@ -45,9 +46,13 @@ export default function AssignDialog({ desk, onClose }: AssignDialogProps) {
     if (busy) return;
     setBusy(true);
     try {
-      await assignDesk(desk.id, emp.login);
+      if (desk) {
+        await assignDesk(desk.id, emp.login);
+      } else if (room) {
+        await assignRoom(room.id, emp.login);
+      }
       await refreshMap(dispatch);
-      showToast(`${emp.displayName} — место ${desk.name}`);
+      showToast(`${emp.displayName} — ${desk ? `место ${desk.name}` : room?.name}`);
       onClose();
     } catch {
       showToast('Не удалось назначить сотрудника');
@@ -65,7 +70,7 @@ export default function AssignDialog({ desk, onClose }: AssignDialogProps) {
       <div className="w-full max-w-sm bg-white rounded-xl shadow-2xl flex flex-col max-h-[70vh]">
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
           <h2 className="text-sm font-semibold text-gray-900">
-            Назначить сотрудника — место {desk.name}
+            Назначить сотрудника — {desk ? `место ${desk.name}` : room?.name}
           </h2>
           <button
             onClick={onClose}
@@ -94,8 +99,8 @@ export default function AssignDialog({ desk, onClose }: AssignDialogProps) {
             <div className="px-4 py-4 text-xs text-gray-400">Никого не найдено</div>
           ) : (
             results.map((emp) => {
-              const current = emp.login === desk.assignment?.login;
-              const seated = !!emp.deskId && emp.deskId !== desk.id;
+              const current = desk ? desk.assignments.some((a) => a.login === emp.login) : room?.assignments.some((a) => a.login === emp.login) ?? false;
+              const seated = !!desk && !!emp.deskId && emp.deskId !== desk.id;
               return (
                 <button
                   key={emp.login}

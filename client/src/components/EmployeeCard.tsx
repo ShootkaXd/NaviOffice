@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Desk } from '../types';
+import { useState } from 'react';
+import { Desk, DeskAssignment } from '../types';
 import { useAuth } from '../auth';
 import { useStore, refreshMap } from '../store';
-import { searchEmployees, unassignDesk } from '../api';
+import { unassignDesk } from '../api';
 import { showToast } from '../utils';
 import Avatar from './Avatar';
 
@@ -14,35 +14,45 @@ interface EmployeeCardProps {
   onAssign: () => void;
 }
 
+function OccupantRow({ a, canAssign, onRemove, busy }: {
+  a: DeskAssignment;
+  canAssign: boolean;
+  onRemove: () => void;
+  busy: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 py-1.5">
+      <Avatar login={a.login} name={a.displayName} size={40} />
+      <div className="min-w-0 flex-1 text-left">
+        <div className="text-xs font-semibold text-gray-900 truncate">{a.displayName}</div>
+        <div className="text-[11px] text-gray-500 truncate">{a.department}</div>
+        <div className="text-[10px] text-gray-400 truncate">{a.title}</div>
+      </div>
+      {canAssign && (
+        <button
+          onClick={onRemove}
+          disabled={busy}
+          className="text-[10px] text-red-400 border border-red-200 rounded px-1.5 py-0.5 hover:bg-red-50 disabled:opacity-50 whitespace-nowrap"
+        >
+          Снять
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function EmployeeCard({ desk, x, y, onClose, onAssign }: EmployeeCardProps) {
   const { user } = useAuth();
   const { dispatch } = useStore();
   const canAssign = user?.role === 'Admin' || user?.role === 'Secretary';
-  const [email, setEmail] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const login = desk.assignment?.login;
+  const occupants = desk.assignments;
 
-  // Email в assignment не входит — подтягиваем из поиска сотрудников.
-  useEffect(() => {
-    setEmail(null);
-    if (!login) return;
-    let alive = true;
-    searchEmployees(login)
-      .then((list) => {
-        const emp = list.find((e) => e.login === login);
-        if (alive && emp) setEmail(emp.email);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-  }, [login]);
-
-  async function handleUnassign() {
+  async function handleUnassign(login: string) {
     if (busy) return;
     setBusy(true);
     try {
-      await unassignDesk(desk.id);
+      await unassignDesk(desk.id, login);
       await refreshMap(dispatch);
       showToast('Сотрудник снят с места');
     } catch {
@@ -66,18 +76,19 @@ export default function EmployeeCard({ desk, x, y, onClose, onAssign }: Employee
         ×
       </button>
 
-      {desk.assignment ? (
-        <div className="flex flex-col items-center text-center">
-          <Avatar login={desk.assignment.login} name={desk.assignment.displayName} size={64} className="mb-2.5" />
-          <div className="text-sm font-semibold text-gray-900">{desk.assignment.displayName}</div>
-          <div className="text-xs text-gray-500 mt-0.5">{desk.assignment.department}</div>
-          <div className="text-xs text-gray-400">{desk.assignment.title}</div>
-          {email && (
-            <a href={`mailto:${email}`} className="text-xs text-accent hover:underline mt-1 break-all">
-              {email}
-            </a>
-          )}
-          <div className="text-[10px] text-gray-300 mt-1.5">Место {desk.name}</div>
+      <div className="text-[10px] text-gray-300 mb-1">Место {desk.name}</div>
+
+      {occupants.length > 0 ? (
+        <div className="divide-y divide-gray-100">
+          {occupants.map((a) => (
+            <OccupantRow
+              key={a.login}
+              a={a}
+              canAssign={canAssign}
+              busy={busy}
+              onRemove={() => handleUnassign(a.login)}
+            />
+          ))}
         </div>
       ) : (
         <div className="flex flex-col items-center text-center py-2">
@@ -88,28 +99,16 @@ export default function EmployeeCard({ desk, x, y, onClose, onAssign }: Employee
             </svg>
           </div>
           <div className="text-sm font-medium text-gray-700">Место свободно</div>
-          <div className="text-[10px] text-gray-300 mt-1">Место {desk.name}</div>
         </div>
       )}
 
-      {canAssign && (
-        <div className="mt-3 flex flex-col gap-1.5">
-          <button
-            onClick={onAssign}
-            className="w-full py-1.5 text-xs bg-accent hover:bg-indigo-500 text-white rounded-md transition-colors"
-          >
-            Назначить сотрудника
-          </button>
-          {desk.assignment && (
-            <button
-              onClick={handleUnassign}
-              disabled={busy}
-              className="w-full py-1.5 text-xs text-red-500 border border-red-200 rounded-md hover:bg-red-50 disabled:opacity-50 transition-colors"
-            >
-              {busy ? 'Снятие…' : 'Снять с места'}
-            </button>
-          )}
-        </div>
+      {canAssign && occupants.length < 2 && (
+        <button
+          onClick={onAssign}
+          className="mt-3 w-full py-1.5 text-xs bg-accent hover:bg-indigo-500 text-white rounded-md transition-colors"
+        >
+          {occupants.length === 0 ? 'Назначить сотрудника' : 'Добавить второго сотрудника'}
+        </button>
       )}
     </div>
   );

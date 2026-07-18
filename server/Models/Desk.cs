@@ -8,7 +8,9 @@ public class Desk
     public double Y { get; set; }
     public string Name { get; set; } = "";
     public double Rotation { get; set; }
+    /// <summary>Свой цвет места; null — цвет по статусу занятости.</summary>
+    public string? Color { get; set; }
 
     public Floor? Floor { get; set; }
-    public Assignment? Assignment { get; set; }
+    public List<Assignment> Assignments { get; set; } = new();
 }

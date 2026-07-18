@@ -23,6 +23,29 @@ export interface Employee {
   title: string;
   email: string;
   deskId?: string | null;
+  roomId?: string | null;
+  managerLogin?: string | null;
+}
+
+export interface Office {
+  id: string;
+  name: string;
+  order: number;
+}
+
+export type PresenceStatus = 'office' | 'remote' | 'dayoff';
+
+export interface PresenceEntry {
+  login: string;
+  date: string;
+  status: PresenceStatus;
+}
+
+export interface TeamMember {
+  login: string;
+  displayName: string;
+  department: string | null;
+  title: string | null;
 }
 
 export interface DeskAssignment {
@@ -45,6 +68,8 @@ export interface Room {
   floorId: string;
   /** Вершины полигона (угловая комната); null — прямоугольник. */
   points: Point[] | null;
+  /** Сотрудники, привязанные к помещению. */
+  assignments: DeskAssignment[];
 }
 
 export interface Desk {
@@ -54,7 +79,9 @@ export interface Desk {
   y: number;
   name: string;
   rotation: number;
-  assignment: DeskAssignment | null;
+  color: string | null;
+  /** До двух сотрудников на месте. */
+  assignments: DeskAssignment[];
   floorId: string;
 }
 
@@ -88,6 +115,7 @@ export interface Floor {
   id: string;
   name: string;
   order: number;
+  officeId: string | null;
   hasBackground: boolean;
 }
 
@@ -108,6 +136,8 @@ export interface BookingItem {
 }
 
 export interface AppState {
+  offices: Office[];
+  currentOfficeId: string;
   floors: Floor[];
   currentFloorId: string;
   elements: MapElement[];
@@ -124,6 +154,7 @@ export type Action =
   | { type: 'DELETE_ELEMENT'; payload: string }
   | { type: 'SELECT'; payload: string | null }
   | { type: 'SET_FLOOR'; payload: string }
-  | { type: 'SET_MAP'; payload: { floors: Floor[]; elements: MapElement[] } }
+  | { type: 'SET_MAP'; payload: { offices: Office[]; floors: Floor[]; elements: MapElement[] } }
+  | { type: 'SET_OFFICE'; payload: string }
   | { type: 'FOCUS_DESK'; payload: string | null }
   | { type: 'SET_STATUSES'; payload: RoomStatus[] };

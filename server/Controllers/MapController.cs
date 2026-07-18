@@ -25,12 +25,17 @@ public class MapController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<MapResponse>> GetMap()
     {
+        var offices = await _db.Offices.AsNoTracking()
+            .OrderBy(o => o.Order).ThenBy(o => o.Name)
+            .Select(o => new OfficeDto { Id = o.Id, Name = o.Name, Order = o.Order })
+            .ToListAsync();
         var floors = await _db.Floors.AsNoTracking()
             .Select(f => new FloorDto
             {
                 Id = f.Id,
                 Name = f.Name,
                 Order = f.Order,
+                OfficeId = f.OfficeId,
                 HasBackground = f.BackgroundImage != null
             })
             .OrderBy(f => f.Order).ThenBy(f => f.Name)
@@ -40,19 +45,35 @@ public class MapController : ControllerBase
         var meetingRooms = await _db.MeetingRooms.AsNoTracking().ToListAsync();
         var markers = await _db.Markers.AsNoTracking().ToListAsync();
         var assignments = await _db.Assignments.AsNoTracking().ToListAsync();
+        var roomAssignments = await _db.RoomAssignments.AsNoTracking().ToListAsync();
 
-        var assignmentDtos = new Dictionary<Guid, DeskAssignmentDto>();
+        var deskAssignments = new Dictionary<Guid, List<DeskAssignmentDto>>();
         foreach (var assignment in assignments)
         {
-            assignmentDtos[assignment.DeskId] = await BuildAssignmentDto(_directory, assignment);
+            if (!deskAssignments.TryGetValue(assignment.DeskId, out var list))
+            {
+                deskAssignments[assignment.DeskId] = list = new List<DeskAssignmentDto>();
+            }
+            list.Add(await BuildAssignmentDto(_directory, assignment.EmployeeLogin));
+        }
+        var roomAssignmentDtos = new Dictionary<Guid, List<DeskAssignmentDto>>();
+        foreach (var assignment in roomAssignments)
+        {
+            if (!roomAssignmentDtos.TryGetValue(assignment.RoomId, out var list))
+            {
+                roomAssignmentDtos[assignment.RoomId] = list = new List<DeskAssignmentDto>();
+            }
+            list.Add(await BuildAssignmentDto(_directory, assignment.EmployeeLogin));
         }
 
         return Ok(new MapResponse
         {
+            Offices = offices,
             Floors = floors,
-            Rooms = rooms.Select(ToRoomDto).ToList(),
+            Rooms = rooms.Select(r => ToRoomDto(r,
+                roomAssignmentDtos.TryGetValue(r.Id, out var ra) ? ra : null)).ToList(),
             Desks = desks.Select(d => ToDeskDto(d,
-                assignmentDtos.TryGetValue(d.Id, out var dto) ? dto : null)).ToList(),
+                deskAssignments.TryGetValue(d.Id, out var list) ? list : null)).ToList(),
             MeetingRooms = meetingRooms.Select(ToMeetingRoomDto).ToList(),
             Markers = markers.Select(ToMarkerDto).ToList()
         });
@@ -71,19 +92,19 @@ public class MapController : ControllerBase
         return File(floor.BackgroundImage, floor.BackgroundContentType);
     }
 
-    internal static async Task<DeskAssignmentDto> BuildAssignmentDto(IEmployeeDirectory directory, Assignment assignment)
+    internal static async Task<DeskAssignmentDto> BuildAssignmentDto(IEmployeeDirectory directory, string login)
     {
-        var employee = await directory.GetByLoginAsync(assignment.EmployeeLogin);
+        var employee = await directory.GetByLoginAsync(login);
         return new DeskAssignmentDto
         {
-            Login = assignment.EmployeeLogin,
-            DisplayName = employee?.DisplayName ?? assignment.EmployeeLogin,
+            Login = login,
+            DisplayName = employee?.DisplayName ?? login,
             Department = employee?.Department,
             Title = employee?.Title
         };
     }
 
-    internal static RoomDto ToRoomDto(Room room) => new()
+    internal static RoomDto ToRoomDto(Room room, List<DeskAssignmentDto>? assignments = null) => new()
     {
         Id = room.Id,
         FloorId = room.FloorId,
@@ -94,7 +115,8 @@ public class MapController : ControllerBase
         Name = room.Name,
         Color = room.Color,
         Capacity = room.Capacity,
-        Points = ParsePoints(room.PointsJson)
+        Points = ParsePoints(room.PointsJson),
+        Assignments = assignments ?? new List<DeskAssignmentDto>()
     };
 
     internal static MarkerDto ToMarkerDto(Marker marker) => new()
@@ -134,7 +156,7 @@ public class MapController : ControllerBase
         return JsonSerializer.Serialize(points, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
     }
 
-    internal static DeskDto ToDeskDto(Desk desk, DeskAssignmentDto? assignment) => new()
+    internal static DeskDto ToDeskDto(Desk desk, List<DeskAssignmentDto>? assignments) => new()
     {
         Id = desk.Id,
         FloorId = desk.FloorId,
@@ -142,7 +164,8 @@ public class MapController : ControllerBase
         Y = desk.Y,
         Name = desk.Name,
         Rotation = desk.Rotation,
-        Assignment = assignment
+        Color = desk.Color,
+        Assignments = assignments ?? new List<DeskAssignmentDto>()
     };
 
     internal static MeetingRoomDto ToMeetingRoomDto(MeetingRoom room) => new()

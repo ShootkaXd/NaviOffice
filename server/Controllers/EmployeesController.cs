@@ -31,7 +31,12 @@ public class EmployeesController : ControllerBase
         var logins = employees.Select(e => e.Login.ToLower()).ToList();
         var deskByLogin = await _db.Assignments
             .Where(a => logins.Contains(a.EmployeeLogin.ToLower()))
-            .ToDictionaryAsync(a => a.EmployeeLogin.ToLower(), a => a.DeskId);
+            .GroupBy(a => a.EmployeeLogin.ToLower())
+            .ToDictionaryAsync(g => g.Key, g => g.First().DeskId);
+        var roomByLogin = await _db.RoomAssignments
+            .Where(a => logins.Contains(a.EmployeeLogin.ToLower()))
+            .GroupBy(a => a.EmployeeLogin.ToLower())
+            .ToDictionaryAsync(g => g.Key, g => g.First().RoomId);
 
         var result = employees.Select(e => new EmployeeDto
         {
@@ -40,10 +45,27 @@ public class EmployeesController : ControllerBase
             Department = e.Department,
             Title = e.Title,
             Email = e.Email,
-            DeskId = deskByLogin.TryGetValue(e.Login.ToLower(), out var deskId) ? deskId : null
+            DeskId = deskByLogin.TryGetValue(e.Login.ToLower(), out var deskId) ? deskId : null,
+            RoomId = roomByLogin.TryGetValue(e.Login.ToLower(), out var roomId) ? roomId : null,
+            ManagerLogin = e.ManagerLogin
         }).ToList();
 
         return Ok(result);
+    }
+
+    /// <summary>Мои прямые подчинённые (по атрибуту manager из справочника).</summary>
+    [HttpGet("/api/team")]
+    public async Task<ActionResult<List<TeamMemberDto>>> Team()
+    {
+        var me = User.FindFirst("sub")?.Value ?? "";
+        var reports = await _directory.GetDirectReportsAsync(me);
+        return Ok(reports.Select(e => new TeamMemberDto
+        {
+            Login = e.Login,
+            DisplayName = e.DisplayName,
+            Department = e.Department,
+            Title = e.Title
+        }).ToList());
     }
 
     [HttpGet("{login}/photo")]

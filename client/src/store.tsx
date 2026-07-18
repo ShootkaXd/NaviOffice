@@ -3,6 +3,8 @@ import { AppState, Action } from './types';
 import { getMap, getMeetingRoomStatuses } from './api';
 
 const initialState: AppState = {
+  offices: [],
+  currentOfficeId: '',
   floors: [],
   currentFloorId: '',
   elements: [],
@@ -35,13 +37,26 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_FLOOR':
       return { ...state, currentFloorId: action.payload, selectedId: null };
     case 'SET_MAP': {
-      const { floors, elements } = action.payload;
-      const currentFloorId = floors.some((f) => f.id === state.currentFloorId)
+      const { offices, floors, elements } = action.payload;
+      const currentOfficeId = offices.some((o) => o.id === state.currentOfficeId)
+        ? state.currentOfficeId
+        : offices[0]?.id ?? '';
+      const officeFloors = floors.filter((f) => f.officeId === currentOfficeId);
+      const currentFloorId = officeFloors.some((f) => f.id === state.currentFloorId)
         ? state.currentFloorId
-        : floors[0]?.id ?? '';
+        : officeFloors[0]?.id ?? '';
       const selectedId =
         state.selectedId && elements.some((el) => el.id === state.selectedId) ? state.selectedId : null;
-      return { ...state, floors, elements, currentFloorId, selectedId };
+      return { ...state, offices, currentOfficeId, floors, elements, currentFloorId, selectedId };
+    }
+    case 'SET_OFFICE': {
+      const officeFloors = state.floors.filter((f) => f.officeId === action.payload);
+      return {
+        ...state,
+        currentOfficeId: action.payload,
+        currentFloorId: officeFloors[0]?.id ?? '',
+        selectedId: null,
+      };
     }
     case 'FOCUS_DESK':
       return { ...state, focusDeskId: action.payload };

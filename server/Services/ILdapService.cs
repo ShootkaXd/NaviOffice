@@ -15,4 +15,7 @@ public interface ILdapService
 
     /// <summary>Returns photo bytes and content type, or null when no photo exists.</summary>
     Task<(byte[] Data, string ContentType)?> GetPhotoAsync(string login);
+
+    /// <summary>Прямые подчинённые сотрудника (по атрибуту manager).</summary>
+    Task<IReadOnlyList<EmployeeInfo>> GetDirectReportsAsync(string managerLogin);
 }

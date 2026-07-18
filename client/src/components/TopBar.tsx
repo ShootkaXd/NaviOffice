@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, refreshMap } from '../store';
+import ScheduleView from './ScheduleView';
+import { createOffice } from '../api';
 import { useAuth } from '../auth';
 import { searchEmployees, saveFloorElements } from '../api';
 import { Desk, Employee, Role } from '../types';
@@ -120,9 +122,47 @@ function EmployeeSearch() {
   );
 }
 
+function OfficeSelect() {
+  const { state, dispatch } = useStore();
+  const { user } = useAuth();
+
+  async function handleChange(value: string) {
+    if (value === '__new__') {
+      const name = prompt('Название нового офиса:');
+      if (name?.trim()) {
+        try {
+          const office = await createOffice(name.trim());
+          await refreshMap(dispatch);
+          dispatch({ type: 'SET_OFFICE', payload: office.id });
+        } catch {
+          showToast('Не удалось создать офис');
+        }
+      }
+      return;
+    }
+    dispatch({ type: 'SET_OFFICE', payload: value });
+  }
+
+  if (state.offices.length === 0) return null;
+  return (
+    <select
+      value={state.currentOfficeId}
+      onChange={(e) => handleChange(e.target.value)}
+      className="bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white/90 text-xs focus:outline-none focus:border-accent max-w-44"
+      title="Офис"
+    >
+      {state.offices.map((o) => (
+        <option key={o.id} value={o.id}>{o.name}</option>
+      ))}
+      {user?.role === 'Admin' && <option value="__new__">+ Новый офис…</option>}
+    </select>
+  );
+}
+
 export default function TopBar() {
   const { state, dispatch } = useStore();
   const { user, logout } = useAuth();
+  const [showSchedule, setShowSchedule] = useState(false);
   const [saving, setSaving] = useState(false);
   const isAdmin = user?.role === 'Admin';
 
@@ -154,7 +194,15 @@ export default function TopBar() {
       </div>
 
       <div className="flex-1 flex justify-center">
+        <OfficeSelect />
         <EmployeeSearch />
+        <button
+          onClick={() => setShowSchedule(true)}
+          className="px-3 py-1 text-xs bg-sidebar-light hover:bg-white/10 text-white/80 rounded-md transition-colors border border-white/10 whitespace-nowrap"
+          title="График посещения офиса"
+        >
+          Расписание
+        </button>
       </div>
 
       {isAdmin && (
@@ -184,6 +232,7 @@ export default function TopBar() {
           </button>
         </div>
       )}
+      {showSchedule && <ScheduleView onClose={() => setShowSchedule(false)} />}
     </header>
   );
 }

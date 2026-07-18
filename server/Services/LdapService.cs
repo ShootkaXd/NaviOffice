@@ -13,7 +13,7 @@ public class LdapService : ILdapService
 {
     private static readonly string[] Attributes =
     {
-        "sAMAccountName", "uid", "displayName", "department", "title", "mail", "thumbnailPhoto", "memberOf"
+        "sAMAccountName", "uid", "displayName", "department", "title", "mail", "thumbnailPhoto", "memberOf", "manager"
     };
 
     private readonly string _host;
@@ -160,6 +160,50 @@ public class LdapService : ILdapService
         {
             _logger.LogError(ex, "LDAP lookup failed for login {Login}", login);
             return null;
+        }
+    }
+
+    /// <summary>Прямые подчинённые: поиск по (manager=DN руководителя).</summary>
+    public async Task<IReadOnlyList<EmployeeInfo>> GetDirectReportsAsync(string managerLogin)
+    {
+        try
+        {
+            using var connection = await OpenServiceConnectionAsync();
+            var q = EscapeFilter(managerLogin, allowEmpty: false);
+            var managerResults = await connection.SearchAsync(_searchBase, LdapConnection.ScopeSub,
+                $"(|(sAMAccountName={q})(uid={q}))", new[] { "distinguishedName" }, false);
+            if (!await managerResults.HasMoreAsync())
+            {
+                return Array.Empty<EmployeeInfo>();
+            }
+            var managerDn = (await managerResults.NextAsync()).Dn;
+
+            var employees = new List<EmployeeInfo>();
+            var results = await connection.SearchAsync(_searchBase, LdapConnection.ScopeSub,
+                $"(manager={EscapeFilter(managerDn, allowEmpty: false)})", Attributes, false);
+            while (await results.HasMoreAsync() && employees.Count < 100)
+            {
+                LdapEntry entry;
+                try
+                {
+                    entry = await results.NextAsync();
+                }
+                catch (LdapReferralException)
+                {
+                    continue;
+                }
+                var employee = MapEntry(entry, null);
+                if (employee != null)
+                {
+                    employees.Add(employee);
+                }
+            }
+            return employees;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "LDAP direct reports lookup failed for {Login}", managerLogin);
+            return Array.Empty<EmployeeInfo>();
         }
     }
 
