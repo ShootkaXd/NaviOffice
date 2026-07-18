@@ -22,6 +22,19 @@ cd client && npm install && npm run dev   # http://localhost:5173
 
 Учётные записи: `admin` / `secretary` / `user`, пароль у всех — `demo`.
 
+## База данных
+
+По умолчанию — SQLite (файл `navioffice.db`, ничего настраивать не нужно). Для продакшена — PostgreSQL:
+
+```json
+"Database": { "Provider": "Postgres" },
+"ConnectionStrings": {
+  "Postgres": "Host=db.corp.local;Port=5432;Database=navioffice;Username=navioffice;Password=***"
+}
+```
+
+Схема создаётся автоматически при первом запуске (`EnsureCreated`). Те же настройки можно передать переменными окружения: `Database__Provider=Postgres`, `ConnectionStrings__Postgres=...`.
+
 ## Подключение Active Directory (LDAP)
 
 В `server/appsettings.json`:

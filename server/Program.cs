@@ -14,9 +14,23 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// --- Database ---
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlite("Data Source=navioffice.db"));
+// --- Database (Sqlite для разработки, Postgres для продакшена) ---
+var dbProvider = builder.Configuration["Database:Provider"] ?? "Sqlite";
+var usePostgres = string.Equals(dbProvider, "Postgres", StringComparison.OrdinalIgnoreCase);
+if (usePostgres)
+{
+    // Booking.Start/End — локальное время (Kind=Unspecified); legacy-режим хранит его
+    // как timestamp without time zone вместо требования UTC.
+    AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
+    var pgConn = builder.Configuration.GetConnectionString("Postgres")
+        ?? "Host=localhost;Port=5432;Database=navioffice;Username=navioffice;Password=navioffice";
+    builder.Services.AddDbContext<AppDbContext>(options => options.UseNpgsql(pgConn));
+}
+else
+{
+    var sqliteConn = builder.Configuration.GetConnectionString("Sqlite") ?? "Data Source=navioffice.db";
+    builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlite(sqliteConn));
+}
 
 // --- Directory services (LDAP or Demo) ---
 builder.Services.AddMemoryCache();
@@ -86,7 +100,10 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.EnsureCreated();
-    SchemaUpgrade.Apply(db); // доводит существующую v1-базу до v2-схемы
+    if (!usePostgres)
+    {
+        SchemaUpgrade.Apply(db); // доводит существующую v1-SQLite-базу до v2-схемы
+    }
     SeedData.EnsureSeeded(db);
 }
 
