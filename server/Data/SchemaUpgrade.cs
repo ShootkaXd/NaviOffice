@@ -192,7 +192,7 @@ public static class SchemaUpgrade
                     CONSTRAINT "FK_Assignments_Desks_DeskId" FOREIGN KEY ("DeskId") REFERENCES "Desks" ("Id") ON DELETE CASCADE
                 );
                 INSERT INTO "Assignments_new" ("Id", "DeskId", "EmployeeLogin", "AssignedBy", "AssignedAt")
-                    SELECT lower(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-a' || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6))),
+                    SELECT upper(hex(randomblob(4)) || '-' || hex(randomblob(2)) || '-4' || substr(hex(randomblob(2)),2) || '-A' || substr(hex(randomblob(2)),2) || '-' || hex(randomblob(6))),
                            "DeskId", "EmployeeLogin", "AssignedBy", "AssignedAt"
                     FROM "Assignments";
                 DROP TABLE "Assignments";
@@ -201,6 +201,10 @@ public static class SchemaUpgrade
                 CREATE INDEX "IX_Assignments_DeskId" ON "Assignments" ("DeskId");
                 """);
         }
+
+        // Базы, мигрированные ранней версией, получили Id в нижнем регистре, а EF Core
+        // в SQLite сравнивает GUID-текст с верхним регистром — DELETE/UPDATE не находили строки.
+        db.Database.ExecuteSqlRaw("""UPDATE "Assignments" SET "Id" = upper("Id") WHERE "Id" <> upper("Id");""");
     }
 
     private static void AddColumnIfMissing(AppDbContext db, string table, string column, string definition)
