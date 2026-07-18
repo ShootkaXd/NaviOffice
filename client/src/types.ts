@@ -145,6 +145,8 @@ export interface AppState {
   tool: ToolType;
   focusDeskId: string | null;
   roomStatuses: Record<string, RoomStatus>;
+  /** Есть несохранённые изменения карты (редактор). */
+  dirty: boolean;
 }
 
 export type Action =

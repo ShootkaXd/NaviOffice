@@ -42,11 +42,22 @@ public partial class PresenceController : ControllerBase
         }
 
         var me = User.FindFirst("sub")?.Value ?? "";
-        var loginList = string.IsNullOrWhiteSpace(logins)
+        var requested = string.IsNullOrWhiteSpace(logins)
             ? new List<string> { me }
             : logins.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Take(100).ToList();
-        var loginsLower = loginList.Select(l => l.ToLower()).ToList();
+
+        // График посещений — приватная информация: виден только самому сотруднику
+        // и его непосредственному руководителю. Роли Admin/Secretary доступа НЕ дают.
+        var visible = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { me };
+        foreach (var report in await _directory.GetDirectReportsAsync(me))
+        {
+            visible.Add(report.Login);
+        }
+        var loginsLower = requested
+            .Where(l => visible.Contains(l))
+            .Select(l => l.ToLower())
+            .ToList();
 
         var items = await _db.Presences.AsNoTracking()
             .Where(p => loginsLower.Contains(p.EmployeeLogin.ToLower())
@@ -79,13 +90,12 @@ public partial class PresenceController : ControllerBase
         }
 
         var me = User.FindFirst("sub")?.Value ?? "";
-        var role = User.FindFirst("role")?.Value ?? "User";
         var target = string.IsNullOrWhiteSpace(request.Login) ? me : request.Login.Trim();
 
-        if (!string.Equals(target, me, StringComparison.OrdinalIgnoreCase)
-            && role != "Admin" && role != "Secretary")
+        // Менять график можно только себе или своим прямым подчинённым.
+        // Роли Admin/Secretary привилегий здесь не дают — это приватные данные.
+        if (!string.Equals(target, me, StringComparison.OrdinalIgnoreCase))
         {
-            // Руководитель может менять статусы своих прямых подчинённых.
             var employee = await _directory.GetByLoginAsync(target);
             if (!string.Equals(employee?.ManagerLogin, me, StringComparison.OrdinalIgnoreCase))
             {

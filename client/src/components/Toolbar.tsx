@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useStore } from '../store';
 import { ToolType } from '../types';
 
@@ -10,7 +11,7 @@ interface Tool {
 const tools: Tool[] = [
   {
     id: 'select',
-    label: 'Выбрать / переместить',
+    label: 'Выбрать / переместить (V)',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
         <path d="M4 0L4 17.5L8.5 13L12 21L14.5 20L11 12L17 12Z" />
@@ -19,7 +20,7 @@ const tools: Tool[] = [
   },
   {
     id: 'room',
-    label: 'Добавить комнату',
+    label: 'Добавить комнату (R)',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -29,7 +30,7 @@ const tools: Tool[] = [
   },
   {
     id: 'desk',
-    label: 'Добавить стол',
+    label: 'Добавить стол (D)',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="2" y="8" width="20" height="8" rx="2" />
@@ -41,7 +42,7 @@ const tools: Tool[] = [
   },
   {
     id: 'meeting',
-    label: 'Добавить переговорную',
+    label: 'Добавить переговорную (M)',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -53,7 +54,7 @@ const tools: Tool[] = [
   },
   {
     id: 'printer',
-    label: 'Добавить принтер',
+    label: 'Добавить принтер (P)',
     icon: (
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M6 9V3h12v6" />
@@ -65,8 +66,29 @@ const tools: Tool[] = [
   },
 ];
 
+const HOTKEYS: Record<string, ToolType> = {
+  KeyV: 'select',
+  KeyR: 'room',
+  KeyD: 'desk',
+  KeyM: 'meeting',
+  KeyP: 'printer',
+};
+
 export default function Toolbar() {
   const { state, dispatch } = useStore();
+
+  // Горячие клавиши V/R/D/M/P (работают в любой раскладке).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      const tool = HOTKEYS[e.code];
+      if (tool) dispatch({ type: 'SET_TOOL', payload: tool });
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [dispatch]);
 
   return (
     <aside className="w-14 bg-sidebar border-r border-white/10 flex flex-col items-center pt-3 gap-1 shrink-0">

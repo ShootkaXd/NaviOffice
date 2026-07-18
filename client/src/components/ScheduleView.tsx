@@ -101,9 +101,12 @@ export default function ScheduleView({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
           <div>
-            <h2 className="text-sm font-semibold text-gray-900">Расписание посещений</h2>
+            <h2 className="text-sm font-semibold text-gray-900">
+              {team.length > 0 ? 'Расписание посещений — вы и ваши подчинённые' : 'Мой график посещений'}
+            </h2>
             <p className="text-[11px] text-gray-400">
-              {team.length > 0 ? 'Вы и ваши подчинённые. ' : ''}Клик по ячейке меняет статус: в офисе → удалённо → нерабочий → пусто.
+              Клик по ячейке меняет статус: в офисе → удалённо → нерабочий → пусто.
+              {' '}График виден только сотруднику и его руководителю.
             </p>
           </div>
           <div className="flex items-center gap-1.5">

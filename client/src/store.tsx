@@ -12,6 +12,7 @@ const initialState: AppState = {
   tool: 'select',
   focusDeskId: null,
   roomStatuses: {},
+  dirty: false,
 };
 
 function reducer(state: AppState, action: Action): AppState {
@@ -19,11 +20,12 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_TOOL':
       return { ...state, tool: action.payload, selectedId: null };
     case 'ADD_ELEMENT':
-      return { ...state, elements: [...state.elements, action.payload], selectedId: action.payload.id };
+      return { ...state, elements: [...state.elements, action.payload], selectedId: action.payload.id, dirty: true };
     case 'UPDATE_ELEMENT':
       return {
         ...state,
         elements: state.elements.map((el) => (el.id === action.payload.id ? action.payload : el)),
+        dirty: true,
       };
     case 'DELETE_ELEMENT':
       return {
@@ -31,6 +33,7 @@ function reducer(state: AppState, action: Action): AppState {
         elements: state.elements.filter((el) => el.id !== action.payload),
         selectedId: state.selectedId === action.payload ? null : state.selectedId,
         focusDeskId: state.focusDeskId === action.payload ? null : state.focusDeskId,
+        dirty: true,
       };
     case 'SELECT':
       return { ...state, selectedId: action.payload };
@@ -47,7 +50,7 @@ function reducer(state: AppState, action: Action): AppState {
         : officeFloors[0]?.id ?? '';
       const selectedId =
         state.selectedId && elements.some((el) => el.id === state.selectedId) ? state.selectedId : null;
-      return { ...state, offices, currentOfficeId, floors, elements, currentFloorId, selectedId };
+      return { ...state, offices, currentOfficeId, floors, elements, currentFloorId, selectedId, dirty: false };
     }
     case 'SET_OFFICE': {
       const officeFloors = state.floors.filter((f) => f.officeId === action.payload);

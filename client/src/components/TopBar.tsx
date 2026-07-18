@@ -163,6 +163,19 @@ export default function TopBar() {
   const { state, dispatch } = useStore();
   const { user, logout } = useAuth();
   const [showSchedule, setShowSchedule] = useState(false);
+
+  // Ctrl/Cmd+S — сохранить карту (для администратора).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        if (user?.role === 'Admin') handleSave();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role, state.currentFloorId, state.elements]);
   const [saving, setSaving] = useState(false);
   const isAdmin = user?.role === 'Admin';
 
@@ -212,6 +225,9 @@ export default function TopBar() {
           className="px-3 py-1 text-xs bg-accent hover:bg-indigo-500 disabled:opacity-50 text-white rounded-md transition-colors"
         >
           {saving ? 'Сохранение…' : 'Сохранить'}
+          {state.dirty && !saving && (
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-300 ml-1.5 align-middle" title="Есть несохранённые изменения" />
+          )}
         </button>
       )}
 
