@@ -80,6 +80,10 @@ export interface Desk {
   name: string;
   rotation: number;
   color: string | null;
+  /** Размер стола (ед. карты); null — стандарт 60×40. */
+  width: number | null;
+  height: number | null;
+  equipment: string[];
   /** До двух сотрудников на месте. */
   assignments: DeskAssignment[];
   floorId: string;

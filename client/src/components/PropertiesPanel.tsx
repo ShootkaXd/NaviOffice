@@ -336,6 +336,64 @@ function MeetingProps({ room, update }: { room: MeetingRoom; update: (p: Partial
   );
 }
 
+const EQUIPMENT_PRESETS = ['Монитор', 'Два монитора', 'ПК', 'Док-станция', 'Ноутбук', 'Кондиционер'];
+
+function DeskEquipmentEditor({ desk, update }: { desk: Desk; update: (p: Partial<Desk>) => void }) {
+  const [draft, setDraft] = useState('');
+
+  function add(item: string) {
+    const v = item.trim();
+    if (!v || desk.equipment.includes(v)) return;
+    update({ equipment: [...desk.equipment, v] });
+    setDraft('');
+  }
+
+  return (
+    <div className="mb-3">
+      <span className="text-white/50 text-xs block mb-1">Оборудование</span>
+      {desk.equipment.length > 0 && (
+        <div className="flex flex-wrap gap-1 mb-1.5">
+          {desk.equipment.map((item) => (
+            <span key={item} className="inline-flex items-center gap-1 bg-sidebar-light border border-white/10 rounded-full px-2 py-0.5 text-[10px] text-white/80">
+              {item}
+              <button
+                onClick={() => update({ equipment: desk.equipment.filter((e) => e !== item) })}
+                className="text-white/30 hover:text-red-400"
+              >
+                ×
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            add(draft);
+          }
+        }}
+        placeholder="Добавить (Enter)…"
+        className="w-full bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-xs focus:outline-none focus:border-accent"
+      />
+      <div className="flex flex-wrap gap-1 mt-1.5">
+        {EQUIPMENT_PRESETS.filter((p) => !desk.equipment.includes(p)).map((p) => (
+          <button
+            key={p}
+            onClick={() => add(p)}
+            className="text-[10px] text-white/40 border border-dashed border-white/15 rounded-full px-2 py-0.5 hover:text-white hover:border-white/40"
+          >
+            + {p}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DeskProps({ desk, update }: { desk: Desk; update: (p: Partial<Desk>) => void }) {
   return (
     <>
@@ -349,6 +407,40 @@ function DeskProps({ desk, update }: { desk: Desk; update: (p: Partial<Desk>) =>
           className="w-full bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-sm focus:outline-none focus:border-accent"
         />
       </label>
+
+      <div className="mb-3">
+        <span className="text-white/50 text-xs block mb-1">Размер стола</span>
+        <div className="flex gap-2">
+          <label className="flex-1">
+            <span className="text-white/30 text-[10px]">Ширина</span>
+            <input
+              type="number"
+              value={Math.round(desk.width ?? 60)}
+              onChange={(e) => update({ width: Math.max(24, Number(e.target.value)) })}
+              className="w-full bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-xs focus:outline-none focus:border-accent"
+            />
+          </label>
+          <label className="flex-1">
+            <span className="text-white/30 text-[10px]">Высота</span>
+            <input
+              type="number"
+              value={Math.round(desk.height ?? 40)}
+              onChange={(e) => update({ height: Math.max(24, Number(e.target.value)) })}
+              className="w-full bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-xs focus:outline-none focus:border-accent"
+            />
+          </label>
+        </div>
+        {(desk.width !== null || desk.height !== null) && (
+          <button
+            onClick={() => update({ width: null, height: null })}
+            className="text-accent text-[10px] mt-1 hover:underline"
+          >
+            Установить значение по умолчанию 60×40
+          </button>
+        )}
+      </div>
+
+      <DeskEquipmentEditor desk={desk} update={update} />
 
       <ColorField value={desk.color ?? '#22c55e'} onChange={(color) => update({ color })} />
 

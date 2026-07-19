@@ -36,6 +36,9 @@ public static class SchemaUpgrade
             """);
         db.Database.ExecuteSqlRaw("""ALTER TABLE "Floors" ADD COLUMN IF NOT EXISTS "OfficeId" uuid NULL;""");
         db.Database.ExecuteSqlRaw("""ALTER TABLE "Desks" ADD COLUMN IF NOT EXISTS "Color" text NULL;""");
+        db.Database.ExecuteSqlRaw("""ALTER TABLE "Desks" ADD COLUMN IF NOT EXISTS "Width" double precision NULL;""");
+        db.Database.ExecuteSqlRaw("""ALTER TABLE "Desks" ADD COLUMN IF NOT EXISTS "Height" double precision NULL;""");
+        db.Database.ExecuteSqlRaw("""ALTER TABLE "Desks" ADD COLUMN IF NOT EXISTS "EquipmentJson" text NULL;""");
         db.Database.ExecuteSqlRaw("""
             CREATE TABLE IF NOT EXISTS "RoomAssignments" (
                 "Id" uuid NOT NULL CONSTRAINT "PK_RoomAssignments" PRIMARY KEY,
@@ -175,6 +178,9 @@ public static class SchemaUpgrade
         AddColumnIfMissing(db, "Rooms", "PointsJson", "TEXT NULL");
         AddColumnIfMissing(db, "Bookings", "AttendeesJson", "TEXT NULL");
         AddColumnIfMissing(db, "Desks", "Color", "TEXT NULL");
+        AddColumnIfMissing(db, "Desks", "Width", "REAL NULL");
+        AddColumnIfMissing(db, "Desks", "Height", "REAL NULL");
+        AddColumnIfMissing(db, "Desks", "EquipmentJson", "TEXT NULL");
 
         // Assignments: старая схема имела PK = DeskId. SQLite не меняет PK — пересборка таблицы.
         var hasIdColumn = db.Database

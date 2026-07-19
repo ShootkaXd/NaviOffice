@@ -143,38 +143,59 @@ function DeskNode({
   const occupants = desk.assignments;
   const occupied = occupants.length > 0;
   const color = desk.color ?? (occupied ? DESK_OCCUPIED_COLOR : DESK_FREE_COLOR);
+  const w = desk.width ?? 60;
+  const h = desk.height ?? 40;
+  const rot = desk.rotation ? `rotate(${desk.rotation} ${desk.x} ${desk.y})` : undefined;
 
   return (
     <g onMouseDown={onMouseDown} onClick={onClick} style={{ cursor: 'pointer' }}>
       {isFocused && (
-        <circle
+        <rect
           className="desk-pulse"
-          cx={desk.x}
-          cy={desk.y}
-          r={DESK_RADIUS}
+          x={desk.x - w / 2 - 4}
+          y={desk.y - h / 2 - 4}
+          width={w + 8}
+          height={h + 8}
+          rx={8}
           fill="none"
           stroke="#6366f1"
           strokeWidth={3}
+          transform={rot}
         />
       )}
-      <circle
-        cx={desk.x}
-        cy={desk.y}
-        r={DESK_RADIUS}
+      {/* Столешница */}
+      <rect
+        x={desk.x - w / 2}
+        y={desk.y - h / 2}
+        width={w}
+        height={h}
+        rx={6}
         fill={color}
-        fillOpacity={occupied ? 0.12 : 0.08}
+        fillOpacity={occupied ? 0.14 : 0.08}
         stroke={color}
         strokeWidth={isSelected ? 2.5 : 1.5}
+        transform={rot}
       />
+      {desk.equipment.length > 0 && (
+        <g transform={`translate(${desk.x + w / 2 - 8}, ${desk.y - h / 2 + 2})`} pointerEvents="none" opacity={0.75}>
+          <rect x="0" y="0" width="7" height="4.5" rx="0.8" fill="none" stroke={color} strokeWidth="1" />
+          <line x1="3.5" y1="4.5" x2="3.5" y2="6" stroke={color} strokeWidth="1" />
+          <line x1="1.5" y1="6" x2="5.5" y2="6" stroke={color} strokeWidth="1" />
+          <title>{desk.equipment.join(', ')}</title>
+        </g>
+      )}
       {isSelected && (
-        <circle
-          cx={desk.x}
-          cy={desk.y}
-          r={DESK_RADIUS + 4}
+        <rect
+          x={desk.x - w / 2 - 4}
+          y={desk.y - h / 2 - 4}
+          width={w + 8}
+          height={h + 8}
+          rx={8}
           fill="none"
           stroke="#6366f1"
           strokeWidth={1.5}
           strokeDasharray="4 2"
+          transform={rot}
         />
       )}
       {occupied ? (
@@ -184,7 +205,7 @@ function DeskNode({
           ))}
           <text
             x={desk.x}
-            y={desk.y + 15}
+            y={desk.y + (desk.height ?? 40) / 2 + 9}
             textAnchor="middle"
             fontSize={7.5}
             fill="#4f46e5"
@@ -196,7 +217,7 @@ function DeskNode({
           </text>
           <text
             x={desk.x}
-            y={desk.y + 24}
+            y={desk.y + (desk.height ?? 40) / 2 + 18}
             textAnchor="middle"
             fontSize={6.5}
             fill="#9ca3af"
@@ -208,20 +229,9 @@ function DeskNode({
         </>
       ) : (
         <>
-          <rect
-            x={desk.x - 9}
-            y={desk.y - 4}
-            width={18}
-            height={10}
-            rx={2}
-            fill={color}
-            fillOpacity={0.5}
-            transform={desk.rotation ? `rotate(${desk.rotation} ${desk.x} ${desk.y})` : undefined}
-            pointerEvents="none"
-          />
           <text
             x={desk.x}
-            y={desk.y + 15}
+            y={desk.y + 3}
             textAnchor="middle"
             fontSize={8}
             fill={color}
@@ -450,6 +460,9 @@ export default function Canvas() {
         name: `D${currentElements.filter((el) => el.type === 'desk').length + 1}`,
         rotation: 0,
         color: null,
+        width: null,
+        height: null,
+        equipment: [],
         assignments: [],
         floorId: state.currentFloorId,
       };

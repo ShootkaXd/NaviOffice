@@ -159,7 +159,12 @@ function OfficeSelect() {
   );
 }
 
-export default function TopBar() {
+interface TopBarProps {
+  view: 'map' | 'reports';
+  onViewChange: (view: 'map' | 'reports') => void;
+}
+
+export default function TopBar({ view, onViewChange }: TopBarProps) {
   const { state, dispatch } = useStore();
   const { user, logout } = useAuth();
   const [showSchedule, setShowSchedule] = useState(false);
@@ -207,6 +212,21 @@ export default function TopBar() {
       </div>
 
       <div className="flex-1 flex justify-center">
+        {/* Вкладки Карта / Отчёты */}
+        <div className="flex gap-0.5 bg-sidebar-light rounded-md p-0.5 border border-white/10">
+          <button
+            onClick={() => onViewChange('map')}
+            className={`px-3 py-0.5 text-xs rounded transition-colors ${view === 'map' ? 'bg-accent text-white' : 'text-white/50 hover:text-white'}`}
+          >
+            Карта
+          </button>
+          <button
+            onClick={() => onViewChange('reports')}
+            className={`px-3 py-0.5 text-xs rounded transition-colors ${view === 'reports' ? 'bg-accent text-white' : 'text-white/50 hover:text-white'}`}
+          >
+            Отчёты
+          </button>
+        </div>
         <OfficeSelect />
         <EmployeeSearch />
         <button

@@ -106,6 +106,9 @@ public class DeskDto
     public string Name { get; set; } = "";
     public double Rotation { get; set; }
     public string? Color { get; set; }
+    public double? Width { get; set; }
+    public double? Height { get; set; }
+    public List<string> Equipment { get; set; } = new();
     /// <summary>До двух сотрудников на месте.</summary>
     public List<DeskAssignmentDto> Assignments { get; set; } = new();
 }
@@ -178,6 +181,9 @@ public class DeskElementDto
     public string Name { get; set; } = "";
     public double Rotation { get; set; }
     public string? Color { get; set; }
+    public double? Width { get; set; }
+    public double? Height { get; set; }
+    public List<string> Equipment { get; set; } = new();
 }
 
 public class MeetingRoomElementDto
@@ -286,4 +292,32 @@ public class TeamMemberDto
     public string DisplayName { get; set; } = "";
     public string? Department { get; set; }
     public string? Title { get; set; }
+}
+
+// ---- Отчёты ----
+
+public class ReportsSummaryDto
+{
+    public int DesksTotal { get; set; }
+    public int DesksOccupied { get; set; }
+    public int MeetingRoomsTotal { get; set; }
+    public int BookingsInPeriod { get; set; }
+    public List<DayCountDto> BookingsPerDay { get; set; } = new();
+    /// <summary>Посещаемость моей команды (я + прямые подчинённые) по дням.</summary>
+    public List<PresenceDayDto> TeamPresence { get; set; } = new();
+    public int TeamSize { get; set; }
+}
+
+public class DayCountDto
+{
+    public string Date { get; set; } = "";
+    public int Count { get; set; }
+}
+
+public class PresenceDayDto
+{
+    public string Date { get; set; } = "";
+    public int Office { get; set; }
+    public int Remote { get; set; }
+    public int DayOff { get; set; }
 }

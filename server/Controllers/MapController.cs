@@ -165,8 +165,33 @@ public class MapController : ControllerBase
         Name = desk.Name,
         Rotation = desk.Rotation,
         Color = desk.Color,
+        Width = desk.Width,
+        Height = desk.Height,
+        Equipment = ParseEquipment(desk.EquipmentJson),
         Assignments = assignments ?? new List<DeskAssignmentDto>()
     };
+
+    internal static List<string> ParseEquipment(string? json)
+    {
+        if (string.IsNullOrEmpty(json))
+        {
+            return new List<string>();
+        }
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
+        }
+    }
+
+    internal static string? SerializeEquipment(List<string>? items)
+    {
+        var clean = items?.Select(i => i.Trim()).Where(i => i.Length > 0).Take(20).ToList();
+        return clean is { Count: > 0 } ? JsonSerializer.Serialize(clean) : null;
+    }
 
     internal static MeetingRoomDto ToMeetingRoomDto(MeetingRoom room) => new()
     {

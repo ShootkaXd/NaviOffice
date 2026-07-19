@@ -130,6 +130,9 @@ interface DeskDto {
   name: string;
   rotation: number;
   color: string | null;
+  width: number | null;
+  height: number | null;
+  equipment: string[];
   assignments: DeskAssignment[];
 }
 
@@ -173,6 +176,9 @@ export async function getMap(): Promise<MapData> {
     ...d,
     rotation: d.rotation ?? 0,
     color: d.color ?? null,
+    width: d.width ?? null,
+    height: d.height ?? null,
+    equipment: d.equipment ?? [],
     assignments: d.assignments ?? [],
     type: 'desk',
   }));
@@ -227,6 +233,9 @@ export function saveFloorElements(floorId: string, elements: MapElement[]): Prom
       name: d.name,
       rotation: d.rotation,
       color: d.color,
+      width: d.width,
+      height: d.height,
+      equipment: d.equipment,
     }));
   const meetingRooms = elements
     .filter((el): el is MeetingRoom => el.type === 'meeting')
@@ -376,4 +385,20 @@ export function setPresence(date: string, status: PresenceStatus | 'none', login
 
 export function getTeam(): Promise<TeamMember[]> {
   return request('/api/team');
+}
+
+// ---------- Отчёты ----------
+
+export interface ReportsSummary {
+  desksTotal: number;
+  desksOccupied: number;
+  meetingRoomsTotal: number;
+  bookingsInPeriod: number;
+  bookingsPerDay: { date: string; count: number }[];
+  teamPresence: { date: string; office: number; remote: number; dayOff: number }[];
+  teamSize: number;
+}
+
+export function getReportsSummary(from: string, to: string): Promise<ReportsSummary> {
+  return request(`/api/reports/summary?from=${from}&to=${to}`);
 }

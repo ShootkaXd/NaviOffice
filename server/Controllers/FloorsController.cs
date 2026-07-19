@@ -167,6 +167,9 @@ public class FloorsController : ControllerBase
             desk.Name = dto.Name;
             desk.Rotation = dto.Rotation;
             desk.Color = string.IsNullOrWhiteSpace(dto.Color) ? null : dto.Color;
+            desk.Width = dto.Width;
+            desk.Height = dto.Height;
+            desk.EquipmentJson = MapController.SerializeEquipment(dto.Equipment);
         }
 
         // --- Meeting rooms (брони сохранившихся переговорных не трогаем; удалённые каскадно чистят брони) ---

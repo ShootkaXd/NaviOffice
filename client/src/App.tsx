@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StoreProvider, useStore, refreshMap, refreshStatuses } from './store';
 import { AuthProvider, useAuth } from './auth';
 import TopBar from './components/TopBar';
@@ -7,11 +7,13 @@ import Canvas from './components/Canvas';
 import PropertiesPanel from './components/PropertiesPanel';
 import FloorSelector from './components/FloorSelector';
 import LoginPage from './components/LoginPage';
+import ReportsPage from './components/ReportsPage';
 
 function Workspace() {
   const { user } = useAuth();
   const { dispatch } = useStore();
   const isAdmin = user?.role === 'Admin';
+  const [view, setView] = useState<'map' | 'reports'>('map');
 
   useEffect(() => {
     refreshMap(dispatch);
@@ -22,15 +24,21 @@ function Workspace() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-100">
-      <TopBar />
-      <div className="flex flex-1 overflow-hidden">
-        {isAdmin && <Toolbar />}
-        <div className="flex flex-col flex-1 overflow-hidden">
-          <Canvas />
-          <FloorSelector />
+      <TopBar view={view} onViewChange={setView} />
+      {view === 'map' ? (
+        <div className="flex flex-1 overflow-hidden">
+          {isAdmin && <Toolbar />}
+          <div className="flex flex-col flex-1 overflow-hidden">
+            <Canvas />
+            <FloorSelector />
+          </div>
+          {isAdmin && <PropertiesPanel />}
         </div>
-        {isAdmin && <PropertiesPanel />}
-      </div>
+      ) : (
+        <div className="flex flex-1 overflow-hidden">
+          <ReportsPage />
+        </div>
+      )}
     </div>
   );
 }
