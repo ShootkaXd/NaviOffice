@@ -89,6 +89,14 @@ public class MarkerDto
     public string Label { get; set; } = "";
 }
 
+/// <summary>Единица оборудования на столе (учёт по инвентарному номеру).</summary>
+public class EquipmentItemDto
+{
+    public string Name { get; set; } = "";
+    /// <summary>Инвентарный номер; пусто — не присвоен.</summary>
+    public string Inv { get; set; } = "";
+}
+
 public class DeskAssignmentDto
 {
     public string Login { get; set; } = "";
@@ -108,7 +116,7 @@ public class DeskDto
     public string? Color { get; set; }
     public double? Width { get; set; }
     public double? Height { get; set; }
-    public List<string> Equipment { get; set; } = new();
+    public List<EquipmentItemDto> Equipment { get; set; } = new();
     /// <summary>До двух сотрудников на месте.</summary>
     public List<DeskAssignmentDto> Assignments { get; set; } = new();
 }
@@ -183,7 +191,7 @@ public class DeskElementDto
     public string? Color { get; set; }
     public double? Width { get; set; }
     public double? Height { get; set; }
-    public List<string> Equipment { get; set; } = new();
+    public List<EquipmentItemDto> Equipment { get; set; } = new();
 }
 
 public class MeetingRoomElementDto

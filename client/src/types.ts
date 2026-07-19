@@ -33,6 +33,12 @@ export interface Office {
   order: number;
 }
 
+/** Единица оборудования с инвентарным номером. */
+export interface EquipmentItem {
+  name: string;
+  inv: string;
+}
+
 export type PresenceStatus = 'office' | 'remote' | 'dayoff';
 
 export interface PresenceEntry {
@@ -83,7 +89,7 @@ export interface Desk {
   /** Размер стола (ед. карты); null — стандарт 60×40. */
   width: number | null;
   height: number | null;
-  equipment: string[];
+  equipment: EquipmentItem[];
   /** До двух сотрудников на месте. */
   assignments: DeskAssignment[];
   floorId: string;

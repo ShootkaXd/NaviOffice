@@ -1,4 +1,4 @@
-import { BookingItem, Desk, DeskAssignment, Employee, Floor, MapElement, Marker, MeetingRoom, Office, Point, PresenceEntry, PresenceStatus, Room, RoomStatus, TeamMember, User } from './types';
+import { BookingItem, Desk, DeskAssignment, Employee, EquipmentItem, Floor, MapElement, Marker, MeetingRoom, Office, Point, PresenceEntry, PresenceStatus, Room, RoomStatus, TeamMember, User } from './types';
 
 const TOKEN_KEY = 'navioffice_token';
 
@@ -132,7 +132,7 @@ interface DeskDto {
   color: string | null;
   width: number | null;
   height: number | null;
-  equipment: string[];
+  equipment: EquipmentItem[];
   assignments: DeskAssignment[];
 }
 

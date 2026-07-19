@@ -24,7 +24,7 @@ function mondayOf(d: Date) {
   return r;
 }
 
-export default function ScheduleView({ onClose }: { onClose: () => void }) {
+export default function ScheduleView({ onClose, inline = false }: { onClose?: () => void; inline?: boolean }) {
   const { user } = useAuth();
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [entries, setEntries] = useState<PresenceEntry[]>([]);
@@ -93,10 +93,11 @@ export default function ScheduleView({ onClose }: { onClose: () => void }) {
     });
   }
 
-  return (
-    <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={onClose}>
+  const content = (
       <div
-        className="w-[860px] max-w-full max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+        className={inline
+          ? 'w-full bg-white rounded-xl border border-gray-200 flex flex-col overflow-hidden'
+          : 'w-[860px] max-w-full max-h-[90vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden'}
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 py-3.5 border-b border-gray-100">
@@ -121,7 +122,9 @@ export default function ScheduleView({ onClose }: { onClose: () => void }) {
             >
               Сегодня
             </button>
-            <button onClick={onClose} className="ml-3 w-7 h-7 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100" title="Закрыть">×</button>
+            {!inline && (
+              <button onClick={onClose} className="ml-3 w-7 h-7 rounded text-gray-300 hover:text-gray-600 hover:bg-gray-100" title="Закрыть">×</button>
+            )}
           </div>
         </div>
 
@@ -179,6 +182,12 @@ export default function ScheduleView({ onClose }: { onClose: () => void }) {
           </table>
         </div>
       </div>
+  );
+
+  if (inline) return content;
+  return (
+    <div className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4" onMouseDown={onClose}>
+      {content}
     </div>
   );
 }

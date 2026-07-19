@@ -171,26 +171,54 @@ public class MapController : ControllerBase
         Assignments = assignments ?? new List<DeskAssignmentDto>()
     };
 
-    internal static List<string> ParseEquipment(string? json)
+    private static readonly JsonSerializerOptions EquipmentJsonOptions = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    internal static List<EquipmentItemDto> ParseEquipment(string? json)
     {
         if (string.IsNullOrEmpty(json))
         {
-            return new List<string>();
+            return new List<EquipmentItemDto>();
         }
         try
         {
-            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+            using var doc = JsonDocument.Parse(json);
+            var result = new List<EquipmentItemDto>();
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                if (el.ValueKind == JsonValueKind.String)
+                {
+                    // старый формат — просто название без инвентарного номера
+                    result.Add(new EquipmentItemDto { Name = el.GetString() ?? "" });
+                }
+                else if (el.ValueKind == JsonValueKind.Object)
+                {
+                    result.Add(new EquipmentItemDto
+                    {
+                        Name = el.TryGetProperty("name", out var n) ? n.GetString() ?? "" : "",
+                        Inv = el.TryGetProperty("inv", out var i) ? i.GetString() ?? "" : ""
+                    });
+                }
+            }
+            return result.Where(e => e.Name.Length > 0).ToList();
         }
         catch (JsonException)
         {
-            return new List<string>();
+            return new List<EquipmentItemDto>();
         }
     }
 
-    internal static string? SerializeEquipment(List<string>? items)
+    internal static string? SerializeEquipment(List<EquipmentItemDto>? items)
     {
-        var clean = items?.Select(i => i.Trim()).Where(i => i.Length > 0).Take(20).ToList();
-        return clean is { Count: > 0 } ? JsonSerializer.Serialize(clean) : null;
+        var clean = items?
+            .Select(i => new EquipmentItemDto { Name = i.Name.Trim(), Inv = i.Inv.Trim() })
+            .Where(i => i.Name.Length > 0)
+            .Take(20)
+            .ToList();
+        return clean is { Count: > 0 } ? JsonSerializer.Serialize(clean, EquipmentJsonOptions) : null;
     }
 
     internal static MeetingRoomDto ToMeetingRoomDto(MeetingRoom room) => new()

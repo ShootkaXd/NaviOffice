@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useStore, refreshMap } from '../store';
-import { Room, Desk, MapElement, Marker, MeetingRoom } from '../types';
+import { Room, Desk, EquipmentItem, MapElement, Marker, MeetingRoom } from '../types';
 import { ROOM_COLORS, showToast } from '../utils';
 import { ApiError, deleteFloorBackground, uploadFloorBackground } from '../api';
 
@@ -336,60 +336,92 @@ function MeetingProps({ room, update }: { room: MeetingRoom; update: (p: Partial
   );
 }
 
-const EQUIPMENT_PRESETS = ['Монитор', 'Два монитора', 'ПК', 'Док-станция', 'Ноутбук', 'Кондиционер'];
+const EQUIPMENT_PRESETS = ['Монитор', 'Два монитора', 'ПК', 'Док-станция', 'Ноутбук'];
 
+/** Учёт оборудования: наименование + инвентарный номер. */
 function DeskEquipmentEditor({ desk, update }: { desk: Desk; update: (p: Partial<Desk>) => void }) {
-  const [draft, setDraft] = useState('');
+  const [name, setName] = useState('');
+  const [inv, setInv] = useState('');
 
-  function add(item: string) {
-    const v = item.trim();
-    if (!v || desk.equipment.includes(v)) return;
-    update({ equipment: [...desk.equipment, v] });
-    setDraft('');
+  function add(itemName: string, itemInv: string) {
+    const n = itemName.trim();
+    if (!n) return;
+    update({ equipment: [...desk.equipment, { name: n, inv: itemInv.trim() }] });
+    setName('');
+    setInv('');
   }
 
   return (
     <div className="mb-3">
       <span className="text-white/50 text-xs block mb-1">Оборудование</span>
       {desk.equipment.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-1.5">
-          {desk.equipment.map((item) => (
-            <span key={item} className="inline-flex items-center gap-1 bg-sidebar-light border border-white/10 rounded-full px-2 py-0.5 text-[10px] text-white/80">
-              {item}
+        <div className="space-y-1 mb-1.5">
+          {desk.equipment.map((item, i) => (
+            <div key={i} className="flex items-center gap-1.5 bg-sidebar-light border border-white/10 rounded-md px-2 py-1">
+              <span className="text-white/80 text-[11px] flex-1 truncate">{item.name}</span>
+              <input
+                type="text"
+                value={item.inv}
+                onChange={(e) =>
+                  update({
+                    equipment: desk.equipment.map((eq, j) => (j === i ? { ...eq, inv: e.target.value } : eq)),
+                  })
+                }
+                placeholder="инв. №"
+                className="w-16 bg-transparent border border-white/10 rounded px-1 py-0.5 text-white/60 text-[10px] font-mono focus:outline-none focus:border-accent"
+                title="Инвентарный номер"
+              />
               <button
-                onClick={() => update({ equipment: desk.equipment.filter((e) => e !== item) })}
-                className="text-white/30 hover:text-red-400"
+                onClick={() => update({ equipment: desk.equipment.filter((_, j) => j !== i) })}
+                className="text-white/30 hover:text-red-400 leading-none"
+                title="Убрать"
               >
                 ×
               </button>
-            </span>
+            </div>
           ))}
         </div>
       )}
-      <input
-        type="text"
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            add(draft);
-          }
-        }}
-        placeholder="Добавить (Enter)…"
-        className="w-full bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-xs focus:outline-none focus:border-accent"
-      />
+      <div className="flex gap-1">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add(name, inv);
+            }
+          }}
+          placeholder="Наименование…"
+          className="flex-1 min-w-0 bg-sidebar-light border border-white/10 rounded-md px-2 py-1 text-white text-xs focus:outline-none focus:border-accent"
+        />
+        <input
+          type="text"
+          value={inv}
+          onChange={(e) => setInv(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add(name, inv);
+            }
+          }}
+          placeholder="инв. №"
+          className="w-16 bg-sidebar-light border border-white/10 rounded-md px-1.5 py-1 text-white text-xs font-mono focus:outline-none focus:border-accent"
+        />
+      </div>
       <div className="flex flex-wrap gap-1 mt-1.5">
-        {EQUIPMENT_PRESETS.filter((p) => !desk.equipment.includes(p)).map((p) => (
+        {EQUIPMENT_PRESETS.map((p) => (
           <button
             key={p}
-            onClick={() => add(p)}
+            onClick={() => add(p, inv)}
             className="text-[10px] text-white/40 border border-dashed border-white/15 rounded-full px-2 py-0.5 hover:text-white hover:border-white/40"
           >
             + {p}
           </button>
         ))}
       </div>
+      <p className="text-white/20 text-[10px] mt-1">Инвентарный номер — для учёта техники за местом.</p>
     </div>
   );
 }

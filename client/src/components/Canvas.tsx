@@ -21,7 +21,7 @@ const MEETING_CARD_W = 288;
 const MEETING_CARD_H = 330;
 
 interface DragState {
-  type: 'move' | 'resize' | 'vertex';
+  type: 'move' | 'resize' | 'vertex' | 'rotate' | 'deskresize';
   startX: number;
   startY: number;
   origEl: MapElement;
@@ -181,7 +181,7 @@ function DeskNode({
           <rect x="0" y="0" width="7" height="4.5" rx="0.8" fill="none" stroke={color} strokeWidth="1" />
           <line x1="3.5" y1="4.5" x2="3.5" y2="6" stroke={color} strokeWidth="1" />
           <line x1="1.5" y1="6" x2="5.5" y2="6" stroke={color} strokeWidth="1" />
-          <title>{desk.equipment.join(', ')}</title>
+          <title>{desk.equipment.map((e) => e.inv ? `${e.name} №${e.inv}` : e.name).join(', ')}</title>
         </g>
       )}
       {isSelected && (
@@ -485,11 +485,12 @@ export default function Canvas() {
       return;
     }
 
-    // select mode — clicking canvas background deselects
+    // select mode — клик по фону снимает выделение и начинает панорамирование
     if ((e.target as SVGElement).id === 'canvas-bg') {
       dispatch({ type: 'SELECT', payload: null });
       setCard(null);
       setMeetingCard(null);
+      setPan({ sx: e.clientX, sy: e.clientY, ox: viewBox.x, oy: viewBox.y });
     }
   }
 
@@ -523,6 +524,21 @@ export default function Canvas() {
           payload.points = orig.points.map((p) => ({ x: p.x + (nx - orig.x), y: p.y + (ny - orig.y) }));
         }
         dispatch({ type: 'UPDATE_ELEMENT', payload });
+      } else if (drag.type === 'rotate' && drag.origEl.type === 'desk') {
+        const o = drag.origEl as Desk;
+        const angle = (Math.atan2(pt.y - o.y, pt.x - o.x) * 180) / Math.PI + 90;
+        const rotation = ((Math.round(angle / 15) * 15) % 360 + 360) % 360;
+        dispatch({ type: 'UPDATE_ELEMENT', payload: { ...o, rotation } as MapElement });
+      } else if (drag.type === 'deskresize' && drag.origEl.type === 'desk') {
+        const o = drag.origEl as Desk;
+        const rad = (-(o.rotation ?? 0) * Math.PI) / 180;
+        const dx = pt.x - o.x;
+        const dy = pt.y - o.y;
+        const lx = dx * Math.cos(rad) - dy * Math.sin(rad);
+        const ly = dx * Math.sin(rad) + dy * Math.cos(rad);
+        const width = Math.max(24, Math.round((Math.abs(lx) * 2) / 4) * 4);
+        const height = Math.max(24, Math.round((Math.abs(ly) * 2) / 4) * 4);
+        dispatch({ type: 'UPDATE_ELEMENT', payload: { ...o, width, height } as MapElement });
       } else if (drag.type === 'vertex' && drag.origEl.type === 'room') {
         const orig = drag.origEl as Room;
         if (!orig.points || drag.vertexIndex === undefined) return;
@@ -1007,15 +1023,75 @@ export default function Canvas() {
         {/* Desks */}
         {currentElements.filter((el) => el.type === 'desk').map((el) => {
           const desk = el as Desk;
+          const isSelected = state.selectedId === desk.id;
           return (
-            <DeskNode
-              key={desk.id}
-              desk={desk}
-              isSelected={state.selectedId === desk.id}
-              isFocused={state.focusDeskId === desk.id}
-              onMouseDown={(e) => onElementMouseDown(e, desk)}
-              onClick={(e) => onDeskClick(e, desk)}
-            />
+            <g key={desk.id}>
+              <DeskNode
+                desk={desk}
+                isSelected={isSelected}
+                isFocused={state.focusDeskId === desk.id}
+                onMouseDown={(e) => onElementMouseDown(e, desk)}
+                onClick={(e) => onDeskClick(e, desk)}
+              />
+              {/* Хэндлы: поворот (кружок сверху) и растяжение (угол) */}
+              {canEdit && isSelected && state.tool === 'select' && (() => {
+                const w = desk.width ?? 60;
+                const h = desk.height ?? 40;
+                const rad = ((desk.rotation ?? 0) * Math.PI) / 180;
+                const rp = (lx: number, ly: number) => ({
+                  x: desk.x + lx * Math.cos(rad) - ly * Math.sin(rad),
+                  y: desk.y + lx * Math.sin(rad) + ly * Math.cos(rad),
+                });
+                const top = rp(0, -h / 2 - 4);
+                const rot = rp(0, -h / 2 - 18);
+                const res = rp(w / 2 + 2, h / 2 + 2);
+                return (
+                  <>
+                    <line x1={top.x} y1={top.y} x2={rot.x} y2={rot.y} stroke="#6366f1" strokeWidth={1} strokeDasharray="2 2" />
+                    <circle
+                      cx={rot.x}
+                      cy={rot.y}
+                      r={5.5}
+                      fill="white"
+                      stroke="#6366f1"
+                      strokeWidth={1.5}
+                      style={{ cursor: 'grab' }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        setDrag({ type: 'rotate', startX: 0, startY: 0, origEl: desk });
+                      }}
+                    >
+                      <title>Повернуть (шаг 15°)</title>
+                    </circle>
+                    <path
+                      d={`M ${rot.x - 2.5} ${rot.y - 0.5} a 2.8 2.8 0 1 1 0.5 1.8`}
+                      fill="none"
+                      stroke="#6366f1"
+                      strokeWidth={1}
+                      pointerEvents="none"
+                    />
+                    <rect
+                      x={res.x - HANDLE_SIZE / 2}
+                      y={res.y - HANDLE_SIZE / 2}
+                      width={HANDLE_SIZE}
+                      height={HANDLE_SIZE}
+                      rx={1}
+                      fill="white"
+                      stroke="#6366f1"
+                      strokeWidth={1.5}
+                      style={{ cursor: 'nwse-resize' }}
+                      onMouseDown={(e) => {
+                        e.stopPropagation();
+                        const pt2 = getSVGPoint(e.clientX, e.clientY);
+                        setDrag({ type: 'deskresize', startX: pt2.x, startY: pt2.y, origEl: desk });
+                      }}
+                    >
+                      <title>Растянуть стол</title>
+                    </rect>
+                  </>
+                );
+              })()}
+            </g>
           );
         })}
 

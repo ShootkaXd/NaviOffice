@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore, refreshMap } from '../store';
-import ScheduleView from './ScheduleView';
 import { createOffice } from '../api';
 import { useAuth } from '../auth';
 import { searchEmployees, saveFloorElements } from '../api';
@@ -160,14 +159,15 @@ function OfficeSelect() {
 }
 
 interface TopBarProps {
-  view: 'map' | 'reports';
-  onViewChange: (view: 'map' | 'reports') => void;
+  view: 'map' | 'manage';
+  onViewChange: (view: 'map' | 'manage') => void;
+  /** Есть ли у пользователя подчинённые — вкладка «Управление» видна только руководителям. */
+  isManager: boolean;
 }
 
-export default function TopBar({ view, onViewChange }: TopBarProps) {
+export default function TopBar({ view, onViewChange, isManager }: TopBarProps) {
   const { state, dispatch } = useStore();
   const { user, logout } = useAuth();
-  const [showSchedule, setShowSchedule] = useState(false);
 
   // Ctrl/Cmd+S — сохранить карту (для администратора).
   useEffect(() => {
@@ -212,30 +212,25 @@ export default function TopBar({ view, onViewChange }: TopBarProps) {
       </div>
 
       <div className="flex-1 flex justify-center">
-        {/* Вкладки Карта / Отчёты */}
-        <div className="flex gap-0.5 bg-sidebar-light rounded-md p-0.5 border border-white/10">
-          <button
-            onClick={() => onViewChange('map')}
-            className={`px-3 py-0.5 text-xs rounded transition-colors ${view === 'map' ? 'bg-accent text-white' : 'text-white/50 hover:text-white'}`}
-          >
-            Карта
-          </button>
-          <button
-            onClick={() => onViewChange('reports')}
-            className={`px-3 py-0.5 text-xs rounded transition-colors ${view === 'reports' ? 'bg-accent text-white' : 'text-white/50 hover:text-white'}`}
-          >
-            Отчёты
-          </button>
-        </div>
+        {/* Вкладки: Управление доступно только руководителям */}
+        {isManager && (
+          <div className="flex gap-0.5 bg-sidebar-light rounded-md p-0.5 border border-white/10">
+            <button
+              onClick={() => onViewChange('map')}
+              className={`px-3 py-0.5 text-xs rounded transition-colors ${view === 'map' ? 'bg-accent text-white' : 'text-white/50 hover:text-white'}`}
+            >
+              Карта
+            </button>
+            <button
+              onClick={() => onViewChange('manage')}
+              className={`px-3 py-0.5 text-xs rounded transition-colors ${view === 'manage' ? 'bg-accent text-white' : 'text-white/50 hover:text-white'}`}
+            >
+              Управление
+            </button>
+          </div>
+        )}
         <OfficeSelect />
         <EmployeeSearch />
-        <button
-          onClick={() => setShowSchedule(true)}
-          className="px-3 py-1 text-xs bg-sidebar-light hover:bg-white/10 text-white/80 rounded-md transition-colors border border-white/10 whitespace-nowrap"
-          title="График посещения офиса"
-        >
-          Расписание
-        </button>
       </div>
 
       {isAdmin && (
@@ -268,7 +263,6 @@ export default function TopBar({ view, onViewChange }: TopBarProps) {
           </button>
         </div>
       )}
-      {showSchedule && <ScheduleView onClose={() => setShowSchedule(false)} />}
     </header>
   );
 }

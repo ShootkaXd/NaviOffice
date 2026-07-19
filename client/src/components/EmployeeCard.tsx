@@ -106,8 +106,11 @@ export default function EmployeeCard({ desk, x, y, onClose, onAssign }: Employee
         <div className="mt-2 pt-2 border-t border-gray-100">
           <div className="text-[10px] text-gray-400 uppercase tracking-wider mb-1">Оборудование</div>
           <div className="flex flex-wrap gap-1">
-            {desk.equipment.map((item) => (
-              <span key={item} className="bg-gray-100 text-gray-600 text-[10px] rounded-full px-2 py-0.5">{item}</span>
+            {desk.equipment.map((item, i) => (
+              <span key={i} className="bg-gray-100 text-gray-600 text-[10px] rounded-full px-2 py-0.5">
+                {item.name}
+                {item.inv && <span className="text-gray-400 font-mono"> №{item.inv}</span>}
+              </span>
             ))}
           </div>
         </div>

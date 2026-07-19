@@ -7,13 +7,21 @@ import Canvas from './components/Canvas';
 import PropertiesPanel from './components/PropertiesPanel';
 import FloorSelector from './components/FloorSelector';
 import LoginPage from './components/LoginPage';
-import ReportsPage from './components/ReportsPage';
+import { getTeam } from './api';
+import ManagePage from './components/ManagePage';
 
 function Workspace() {
   const { user } = useAuth();
   const { dispatch } = useStore();
   const isAdmin = user?.role === 'Admin';
-  const [view, setView] = useState<'map' | 'reports'>('map');
+  const [view, setView] = useState<'map' | 'manage'>('map');
+  const [isManager, setIsManager] = useState(false);
+
+  useEffect(() => {
+    getTeam()
+      .then((team) => setIsManager(team.length > 0))
+      .catch(() => setIsManager(false));
+  }, []);
 
   useEffect(() => {
     refreshMap(dispatch);
@@ -24,7 +32,7 @@ function Workspace() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-gray-100">
-      <TopBar view={view} onViewChange={setView} />
+      <TopBar view={view} onViewChange={setView} isManager={isManager} />
       {view === 'map' ? (
         <div className="flex flex-1 overflow-hidden">
           {isAdmin && <Toolbar />}
@@ -35,9 +43,7 @@ function Workspace() {
           {isAdmin && <PropertiesPanel />}
         </div>
       ) : (
-        <div className="flex flex-1 overflow-hidden">
-          <ReportsPage />
-        </div>
+        <ManagePage />
       )}
     </div>
   );
